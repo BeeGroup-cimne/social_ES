@@ -1,28 +1,16 @@
-import pandas as pd
-import geopandas as gpd
-import json
-import config
-import requests
-
+import argparse
+from utils_INE import *
+from utils_OpenDataBCN import *
 
 if __name__ == "__main__":
 
-    for gr in config.ops.keys():
-        for op in config.ops[gr]:
-            if op["Ingestor"] == "OpenDataBCN":
-                name_ds = "Population by sex and age"
-                ds_meta = [ds for ds in config.ingestors["OpenDataBCN"]["AllDatasets"]
-                           if ds['title_translated']['en'] == op["Title"]][0]
-                hashes = [item["id"] for item in ds_meta["resources"]]
-                url = [requests.get(
-                    url=f"https://opendata-ajuntament.barcelona.cat/data/api/action/datastore_search?resource_id={hash}",
-                    headers={"Authorization": f"TOK:{config['OpenDataBCN']['Token']}"}).json() for hash in hashes]
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-mc','--municipality_code', help='Provide the municipality code you want to obtain data',
+                        default=None)
+    parser.add_argument('-fg','--forcegather', help='Force the online gathering process without considering '
+                                                    'already downloaded datasets')
+    args = parser.parse_args()
 
-                r = requests.get(
-                    url='https://opendata-ajuntament.barcelona.cat/data/api/action/datastore_search?resource_id=b00be3f8-9328-4175-8689-24a25bc0907c',
-                    headers={'Authorization': f"TOK:{config['OpenDataBCN']['Token']}"}).json()
+    # Gather the INE datasets
+    rental_dist = INERentalDistributionAtlas(municipality_code=args.municipalitycode)
 
-            elif op["Ingestor"] == "INERentalDistributionAtlas":
-                config.ingestors["INERentalDistributionAtlas"]["DataFrame"]
-
-            #

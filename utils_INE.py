@@ -8,6 +8,7 @@ from tqdm import tqdm
 import sys
 import numpy as np
 
+# Generic utils
 
 def get_links_that_contain(regexp, html):
 
@@ -49,6 +50,69 @@ operation_dict = {
     'aggregate': aggregate,
     'rename': rename
 }
+
+
+def RelationAutonomousCommunityAndProvince():
+    df = pd.DataFrame([
+        ("01", "Andalucía","04","Almería"),
+        ("01", "Andalucía", "11", "Cádiz"),
+        ("01", "Andalucía", "14", "Córdoba"),
+        ("01", "Andalucía", "18", "Granada"),
+        ("01", "Andalucía", "21", "Huelva"),
+        ("01", "Andalucía", "23", "Jaén"),
+        ("01", "Andalucía", "29", "Málaga"),
+        ("01", "Andalucía", "41", "Sevilla"),
+        ("02", "Aragón", "22", "Huesca"),
+        ("02", "Aragón", "44", "Teruel"),
+        ("02", "Aragón", "50", "Zaragoza"),
+        ("03", "Asturias, Principado de", "33", "Asturias"),
+        ("04", "Balears, Illes", "07", "Balears, Illes"),
+        ("05", "Canarias", "35", "Palmas, Las"),
+        ("05", "Canarias", "38", "Santa Cruz de Tenerife"),
+        ("06", "Cantabria", "39", "Cantabria"),
+        ("07", "Castilla y León", "05", "Ávila"),
+        ("07", "Castilla y León", "09", "Burgos"),
+        ("07", "Castilla y León", "24", "León"),
+        ("07", "Castilla y León", "34", "Palencia"),
+        ("07", "Castilla y León", "37", "Salamanca"),
+        ("07", "Castilla y León", "40", "Segovia"),
+        ("07", "Castilla y León", "42", "Soria"),
+        ("07", "Castilla y León", "47", "Valladolid"),
+        ("07", "Castilla y León", "49", "Zamora"),
+        ("08", "Castilla-La Mancha", "02", "Albacete"),
+        ("08", "Castilla-La Mancha", "13", "Ciudad Real"),
+        ("08", "Castilla-La Mancha", "16", "Cuenca"),
+        ("08", "Castilla-La Mancha", "19", "Guadalajara"),
+        ("08", "Castilla-La Mancha", "45", "Toledo"),
+        ("09", "Cataluña", "08", "Barcelona"),
+        ("09", "Cataluña", "17", "Girona"),
+        ("09", "Cataluña", "25", "Lleida"),
+        ("09", "Cataluña", "43", "Tarragona"),
+        ("10", "Comunitat Valenciana", "03", "Alicante/Alacant"),
+        ("10", "Comunitat Valenciana", "12", "Castellón/Castelló"),
+        ("10", "Comunitat Valenciana", "46", "Valencia/València"),
+        ("11", "Extremadura", "06", "Badajoz"),
+        ("11", "Extremadura", "10", "Cáceres"),
+        ("12", "Galicia", "15", "Coruña, A"),
+        ("12", "Galicia", "27", "Lugo"),
+        ("12", "Galicia", "32", "Ourense"),
+        ("12", "Galicia", "36", "Pontevedra"),
+        ("13", "Madrid, Comunidad de", "28", "Madrid"),
+        ("14", "Murcia, Región de", "30", "Murcia"),
+        ("15", "Navarra, Comunidad Foral de", "31", "Navarra"),
+        ("16", "País Vasco", "01", "Araba/Álava"),
+        ("16", "País Vasco", "48", "Bizkaia"),
+        ("16", "País Vasco", "20", "Gipuzkoa"),
+        ("17", "Rioja, La", "26", "Rioja, La"),
+        ("18", "Ceuta", "51", "Ceuta"),
+        ("19", "Melilla", "52", "Melilla")
+    ])
+    df.columns = ["Autonomous community code", "Autonomous community name", "Province code", "Province name"]
+
+    return df
+
+
+# Gather functions for Spanish National Statistics datasets
 
 def INERentalDistributionAtlas(municipality_code=None):
 
@@ -166,7 +230,7 @@ def INERentalDistributionAtlas(municipality_code=None):
         "Sections": sections
     })
 
-def INEPopulationAnualCensus():
+def INEPopulationAnualCensus(municipality_code = None):
 
     os.makedirs('data/INEPopulationAnualCensus', exist_ok=True)
     filename = "data/INEPopulationAnualCensus/df.tsv"
@@ -320,6 +384,12 @@ def INEPopulationAnualCensus():
     else:
         g_df = pd.read_csv(filename, sep="\t")
 
+    if municipality_code is not None:
+        if type(municipality_code) == str:
+            g_df = g_df[(g_df["Municipality code"] == municipality_code).values]
+        elif type(municipality_code) == list:
+            g_df = g_df[g_df["Municipality code"].isin(municipality_code)]
+
     # national = g_df[pd.isna(g_df["Province code"]) & pd.isna(g_df["Municipality code"]) & pd.isna(g_df["District code"]) & pd.isna(g_df["Section code"])]
     # national = national[national.columns[national.notna().any()]]
     # province = g_df[-pd.isna(g_df["Province code"]) & pd.isna(g_df["Municipality code"]) & pd.isna(g_df["District code"]) & pd.isna(g_df["Section code"])]
@@ -338,66 +408,6 @@ def INEPopulationAnualCensus():
         "Districts": districts,
         "Sections": sections
     })
-
-
-def RelationAutonomousCommunityAndProvince():
-    df = pd.DataFrame([
-        ("01", "Andalucía","04","Almería"),
-        ("01", "Andalucía", "11", "Cádiz"),
-        ("01", "Andalucía", "14", "Córdoba"),
-        ("01", "Andalucía", "18", "Granada"),
-        ("01", "Andalucía", "21", "Huelva"),
-        ("01", "Andalucía", "23", "Jaén"),
-        ("01", "Andalucía", "29", "Málaga"),
-        ("01", "Andalucía", "41", "Sevilla"),
-        ("02", "Aragón", "22", "Huesca"),
-        ("02", "Aragón", "44", "Teruel"),
-        ("02", "Aragón", "50", "Zaragoza"),
-        ("03", "Asturias, Principado de", "33", "Asturias"),
-        ("04", "Balears, Illes", "07", "Balears, Illes"),
-        ("05", "Canarias", "35", "Palmas, Las"),
-        ("05", "Canarias", "38", "Santa Cruz de Tenerife"),
-        ("06", "Cantabria", "39", "Cantabria"),
-        ("07", "Castilla y León", "05", "Ávila"),
-        ("07", "Castilla y León", "09", "Burgos"),
-        ("07", "Castilla y León", "24", "León"),
-        ("07", "Castilla y León", "34", "Palencia"),
-        ("07", "Castilla y León", "37", "Salamanca"),
-        ("07", "Castilla y León", "40", "Segovia"),
-        ("07", "Castilla y León", "42", "Soria"),
-        ("07", "Castilla y León", "47", "Valladolid"),
-        ("07", "Castilla y León", "49", "Zamora"),
-        ("08", "Castilla-La Mancha", "02", "Albacete"),
-        ("08", "Castilla-La Mancha", "13", "Ciudad Real"),
-        ("08", "Castilla-La Mancha", "16", "Cuenca"),
-        ("08", "Castilla-La Mancha", "19", "Guadalajara"),
-        ("08", "Castilla-La Mancha", "45", "Toledo"),
-        ("09", "Cataluña", "08", "Barcelona"),
-        ("09", "Cataluña", "17", "Girona"),
-        ("09", "Cataluña", "25", "Lleida"),
-        ("09", "Cataluña", "43", "Tarragona"),
-        ("10", "Comunitat Valenciana", "03", "Alicante/Alacant"),
-        ("10", "Comunitat Valenciana", "12", "Castellón/Castelló"),
-        ("10", "Comunitat Valenciana", "46", "Valencia/València"),
-        ("11", "Extremadura", "06", "Badajoz"),
-        ("11", "Extremadura", "10", "Cáceres"),
-        ("12", "Galicia", "15", "Coruña, A"),
-        ("12", "Galicia", "27", "Lugo"),
-        ("12", "Galicia", "32", "Ourense"),
-        ("12", "Galicia", "36", "Pontevedra"),
-        ("13", "Madrid, Comunidad de", "28", "Madrid"),
-        ("14", "Murcia, Región de", "30", "Murcia"),
-        ("15", "Navarra, Comunidad Foral de", "31", "Navarra"),
-        ("16", "País Vasco", "01", "Araba/Álava"),
-        ("16", "País Vasco", "48", "Bizkaia"),
-        ("16", "País Vasco", "20", "Gipuzkoa"),
-        ("17", "Rioja, La", "26", "Rioja, La"),
-        ("18", "Ceuta", "51", "Ceuta"),
-        ("19", "Melilla", "52", "Melilla")
-    ])
-    df.columns = ["Autonomous community code", "Autonomous community name", "Province code", "Province name"]
-
-    return df
 
 
 def INEHouseholdsPriceIndex():
@@ -464,13 +474,103 @@ def INEHouseholdsPriceIndex():
         })
 
 
-def INEEssentialCharacteristicsOfPopulationAndHouseholds():
-    "https://www.ine.es/dyngs/INEbase/es/operacion.htm?c=Estadistica_C&cid=1254736177092&menu=resultados&idp=1254735572981"
+def INEEssentialCharacteristicsOfPopulationAndHouseholds(municipality_code = None):
+    # Year 2021, more info:
+    # https://www.ine.es/dyngs/INEbase/es/operacion.htm?c=Estadistica_C&cid=1254736177092&menu=resultados&idp=1254735572981
+
+    base_link = "https://www.ine.es/dynt3/inebase/en/index.htm"
+    links_to_obtain_ids = {
+        # "People": {
+        #     "Mobility": "?padre=8983&capsel=8987",
+        #     "FamilyDynamics": "?padre=8988&capsel=8992",
+        #     "SocialSupport": "?padre=8993&capsel=8997",
+        #     "FamilyOrigin": "?padre=8998&capsel=9002",
+        #     "ContactWithNewTechnologies": "?padre=9003&capsel=9007",
+        #     "LanguageKnowledge": "?padre=9008&capsel=9031"
+        # },
+        # "Homes": {
+        #     "FamilyUnit": "?padre=9545&capsel=9549",
+        #     "OneSinglePerson": "?padre=9550&capsel=9554",
+        #     "Couples": "?padre=9555&capsel=9559",
+        #     "Monoparental": "?padre=9560&capsel=9564",
+        #     "SizeCharacteristics": "?padre=9565&capsel=9569",
+        #     "Ownership": "?padre=9570&capsel=9574",
+        #     "SecondHomes": "?padre=9575&capsel=9579",
+        #     "Vehicles": "?padre=9580&capsel=9584",
+        #     "WasteSeparation": "?padre=9585&capsel=9589",
+        #     "DomesticServices": "?padre=9590&capsel=9594"
+        # },
+        "Households": {
+            "Installations": "?padre=9595&capsel=9599",
+            "MainHouseholdSizes": "?padre=9600&capsel=9604",
+            "MainHouseholdContexts": "?padre=9605&capsel=9609",
+            "AccessibilityAndConservation": "?padre=9610&capsel=9614",
+            "BuildingInstallation": "?padre=9615&capsel=9619"
+        }
+    }
+
+    os.makedirs('data/INEEssentialCharacteristicsOfPopulationAndHouseholds', exist_ok=True)
+    filename = "data/INEEssentialCharacteristicsOfPopulationAndHouseholds/df.tsv"
+
+    if not os.path.exists(filename):
+
+        print("Reading the metadata to gather the INE essential characteristics of population and households", file=sys.stdout)
+
+        for related_to, sections_dict in links_to_obtain_ids.items():
+            # related_to, sections_dict = list(links_to_obtain_ids.items())[0]
+            for subject, sections_link in sections_dict.items():
+                # subject, sections_link = list(sections_dict.items())[0]
+                req = requests.get(f"{base_link}{sections_link}",headers={'User-Agent': 'Chrome/51.0.2704.103'})
+                ids = [re.search(r'(tpx=)(?P<x>\w+)(&L)', link).group('x') for link in
+                 get_links_that_contain("dlgExport", req.text)]
+                urls = [f"https://www.ine.es/jaxi/files/tpx/en/csv_bd/{id}.csv?nocab=1" for id in ids]
+
+                df_BuildingTypeAndYearOfConstruction = None
+                dfNetIncomes = None
+                dfHouseholdComposition = None
+                dfHouseholdArea= None
+
+                for url in urls:
+                    # url = urls[14]
+                    r = requests.get(url)
+                    r.encoding = 'utf-8'
+                    df_ = pd.read_csv(StringIO(r.text), sep="\t", encoding="utf-8")
+                    if (df_.columns.isin(["Municipios","Tipo de edificio","Año de construcción del edificio"]).sum()==3):
+                        if df_BuildingTypeAndYearOfConstruction is None:
+                            df_BuildingTypeAndYearOfConstruction = df_
+                        else:
+                            df_BuildingTypeAndYearOfConstruction = df_BuildingTypeAndYearOfConstruction.merge(df_)
+                    elif (df_.columns.isin(['Municipios', 'Nivel de ingresos mensuales netos del hogar']).sum()==2):
+                        if dfNetIncomes is None:
+                            dfNetIncomes = df_
+                        else:
+                            dfNetIncomes = dfNetIncomes.merge(df_)
+                    elif (df_.columns.isin(['Municipios', 'Número de miembros del hogar']).sum()==2):
+                        if dfHouseholdComposition is None:
+                            dfHouseholdComposition = df_
+                        else:
+                            dfHouseholdComposition = dfHouseholdComposition.merge(df_)
+                    elif (df_.columns.isin(['Municipios', 'Superficie útil de la vivienda']).sum()==2):
+                        if dfHouseholdArea is None:
+                            dfHouseholdArea = df_
+                        else:
+                            dfHouseholdArea = dfHouseholdArea.merge(df_)
+
+                    df_.to_csv("test.csv", index=False)
 
 
+def INEMunicipalityNamesToMunicipalityCodes():
 
-def INEConsumo_electrico():
-    # Indicadores de distribución de consumo eléctrico
+    df = pd.read_excel("https://www.ine.es/daco/daco42/codmun/diccionario24.xlsx", header=1)
+    df['Municipality code'] = df['CPRO'].astype(int).apply(lambda x: f"{x:02d}") +\
+                              df['CMUN'].astype(int).apply(lambda x: f"{x:03d}")
+    df.rename(columns = {'NOMBRE':'Municipality name'}, inplace=True)
+    df.drop(columns = ["CODAUTO","CPRO","CMUN","DC"],inplace=True)
+
+    return df
+
+
+def INEAggregatedElectricityConsumption(municipality_code = None):
     os.makedirs('data/INECensus', exist_ok=True)
     filename = "data/INECensus/consumption.tsv"
     if not os.path.exists(filename):
@@ -489,6 +589,12 @@ def INEConsumo_electrico():
     else:
         g_df = pd.read_csv(filename,sep="\t",dtype={0:str,1:str,2:str})
 
+    if municipality_code is not None:
+        if type(municipality_code) == str:
+            g_df = g_df[(g_df["Municipality code"] == municipality_code).values]
+        elif type(municipality_code) == list:
+            g_df = g_df[g_df["Municipality code"].isin(municipality_code)]
+
     municipality = g_df[-pd.isna(g_df["Municipality code"]) & pd.isna(g_df["District code"])]
     municipality = municipality[municipality.columns[municipality.notna().any()]]
     districts = g_df[-pd.isna(g_df["Municipality code"]) & -pd.isna(g_df["District code"])]
@@ -499,7 +605,7 @@ def INEConsumo_electrico():
         "Districts": districts
     })
 
-def INECensus2021():
+def INECensus2021(municipality_code = None):
     DATA_CENSO2021 = "https://www.ine.es/censos2021/C2021_Indicadores.csv"
 
     censo_ingestion_urls = {
@@ -609,6 +715,15 @@ def INECensus2021():
     else:
         g_df = pd.read_csv(filename,sep="\t",dtype={0:str,1:str,2:str})
 
+    if municipality_code is not None:
+        if type(municipality_code) == str:
+            g_df = g_df[(g_df["Municipality code"] == municipality_code).values]
+        elif type(municipality_code) == list:
+            g_df = g_df[g_df["Municipality code"].isin(municipality_code)]
+
+    g_df["Country code"] = "ES"
+    g_df["Province code"] = g_df["Municipality code"].str[:2]
+
     municipality = g_df[pd.isna(g_df["District code"]) & pd.isna(g_df["Section code"])]
     municipality = municipality[municipality.columns[municipality.notna().any()]]
     districts = g_df[-pd.isna(g_df["District code"]) & pd.isna(g_df["Section code"])]
@@ -622,12 +737,7 @@ def INECensus2021():
         "Sections": sections
     })
 
-
-
-
-
-
-def INEHouseholdsRentalPriceIndex():
+def INEHouseholdsRentalPriceIndex(municipality_code = None):
 
     os.makedirs('data/INEHouseholdsRentalPriceIndex', exist_ok=True)
     filename = "data/INEHouseholdsRentalPriceIndex/df.tsv"
@@ -664,8 +774,15 @@ def INEHouseholdsRentalPriceIndex():
     else:
         df_ = pd.read_csv(filename, sep="\t")
 
+    if municipality_code is not None:
+        if type(municipality_code) == str:
+            df_ = df_[(df_["Municipality code"] == municipality_code).values]
+        elif type(municipality_code) == list:
+            df_ = df_[df_["Municipality code"].isin(municipality_code)]
+
     df_["Country code"] = "ES"
     df_["Province code"] = df_["Municipality code"].str[:2]
+
     municipality = df_[-pd.isna(df_["Municipality code"]) & pd.isna(
         df_["District code"])]
     municipality = municipality[municipality.columns[municipality.notna().any()]]
