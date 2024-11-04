@@ -14,15 +14,20 @@ import socioeconomic_ES as sc
 # Return the available collections
 sc.get_collections() 
 
-# Download all the socioeconomic data from all collections
+#  Downloading all socioeconomic data from all available collections is the default option, but the parameters can be changed.
 sc.download()
 
-# Download socioeconomic data in the `path` from the specified `collections`, `start year`, `end year`, and `municipality codes`. Decide whether to force gathering (True =  Do not take into account that datasets have already been downloaded).
-sc.download(path,['INEcensus2021'], 2021, 2023, ['08001','08002'], False) 
+# Download socioeconomic data in the `path: str` from the specified `collections: list`, `years: list`, and `municipality codes: list`. Decide whether to `force_gathering: bool` (True =  Do not take into account that datasets have already been downloaded).
+sc.download(path,['INEcensus2021'], list(range(2021,2024+1)), ['08001','08002'], False) 
 ```
+
+## For developers
+All the gathering functions should have the input parameters: `path`, `years` and `municipality codes`.
+
 
 ## Authors
 - Jose Manuel Broto - jmbroto@cimne.upc.edu
 - Gerard Mor - gmor@cimne.upc.edu
-  
+- Míriam Méndez - miriam.mendez.serrano@estudiantat.upc.edu
+
 Copyright (c) 2024 Jose Manuel Broto, Gerard Mor

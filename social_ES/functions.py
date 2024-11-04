@@ -1,33 +1,44 @@
-from social_ES.utils_INE import *
-from social_ES.utils_OpenDataBCN import *
-from social_ES.utils import *
+import utils_INE
+# from utils_OpenDataBCN import *
+from yaml import safe_load as yload
+import os
 
-def get_colections():
-    return """
-        INERentalDistributionAtlas: https://www.ine.es/dyngs/INEbase/en/operacion.htm?c=Estadistica_C&cid=1254736177088&menu=ultiDatos&idp=1254735976608
-        INEPopulationAnualCensus: https://www.ine.es/dyngs/INEbase/es/operacion.htm?c=Estadistica_C&cid=1254736176992&menu=resultados&idp=1254735572981
-        INEHouseholdsPriceIndex: 
-        INEAggregatedElectricityConsumption:
-        INEHouseholdsRentalPriceIndex:
-        INEConsumerPriceIndex
-        INECensus2021
-"""
+
+with open(f'collections.yaml','r') as f:
+    data = yload(f)
+
+
+def available_collections():
+    collections = [collection for source in data.keys() for collection in data[source].keys()]
+    for collection in collections:
+        print(collection)
+
+    return collections
+
+
+def retrieve_data(collection, years, municip):
     
-def download(wd='.',collections=['all'],start=-1,end=-1,municip=['all'],fg=False):
-    if fg:
-        try:
-            os.removedirs(wd)
-        except FileNotFoundError:
-            pass
-if __name__ == "__main__":
+    return dfs
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-mc','--municipality_code', help='Provide the municipality code you want to obtain data',
-                        default=None)
-    parser.add_argument('-fg','--forcegather', help='Force the online gathering process without considering '
-                                                    'already downloaded datasets')
-    args = parser.parse_args()
 
-    # Gather the INE datasets
-    rental_dist = INERentalDistributionAtlas(municipality_code=args.municipalitycode)
+def download(wd='data',collections=None,years=None,municip=None,fg=False):
+    if collections == None:
+        collections = available_collections()
 
+    for collec in collections:
+        path = f"{wd}/{collec}/"
+        if fg:
+            try:
+                os.removedirs(path)
+            except FileNotFoundError:
+                pass
+
+        os.makedirs(path,exist_ok=True)
+        func = getattr(utils_INE,collec)
+        df = func(path=path,municipality_code=municip,years=years)
+        with open(f'output2.txt', 'w',) as f :
+            f.write(json.dumps(df))
+        print(df)
+
+
+download(collections=['INEPopulationAnualCensus'])

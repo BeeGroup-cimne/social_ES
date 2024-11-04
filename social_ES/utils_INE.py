@@ -114,10 +114,9 @@ def RelationAutonomousCommunityAndProvince():
 
 # Gather functions for Spanish National Statistics datasets
 
-def INERentalDistributionAtlas(municipality_code=None):
+def INERentalDistributionAtlas(path, municipality_code, years):
 
-    os.makedirs('data/INERentalDistributionAtlas', exist_ok=True)
-    filename = "data/INERentalDistributionAtlas/df.tsv"
+    filename = f"{path}/df.tsv"
 
     if not os.path.exists(filename):
 
@@ -146,12 +145,15 @@ def INERentalDistributionAtlas(municipality_code=None):
                 df_["Municipality name"] = df_["Municipalities"].astype(str).str[6:]
                 df_["Municipality code"] = df_["Municipalities"].astype(str).str[:5]
                 df_["District code"] = df_["Distritos"].astype(str).str[5:7]
-                df_["Section code"] = df_["Secciones"].astype(str).str[7:10]
-                df_["Year"] = df_["Periodo"]
+                df_["Section code"] = df_["Sections"].astype(str).str[7:10]
+                try:
+                    df_["Year"] = df_["Periodo"]
+                except KeyError:
+                    df_["Year"] = df_["Period"]
                 df_["Value"] = df_["Total"]
                 df_["Value"] = pd.to_numeric(df_["Total"].astype(str).str.replace('.', '').str.replace(',', '.'), errors="coerce")
                 df_ = df_.sort_values(by='Value', na_position='last')
-                df_ = df_.drop(columns=["Municipalities","Distritos","Secciones","Periodo","Total"])
+                df_ = df_.drop(columns=["Municipalities","Distritos","Sections","Periodo","Total"])
                 df_ = df_.drop_duplicates([col for col in df_.columns if col not in 'Value'])
                 if "Nationality" in df_.columns:
                     df_["Nationality"] = df_["Nationality"].replace({"Extranjera":"Foreign"})
@@ -184,9 +186,9 @@ def INERentalDistributionAtlas(municipality_code=None):
                     maincol = [col for col in allcols if col not in subgroups]
                     maincol.extend([col for col in allcols if col in subgroups])
                     df_.columns = df_.columns.reorder_levels(order=maincol)
-                    df_.columns = [" ~ ".join([f"{level}:{value}" if level in subgroups else f"{value}"
+                    df_.columns = [" ~ ".join([f"{level}:{value}" if level in subgroups else value
                                                for level, value in zip(df_.columns.names, cols)])
-                                   if cols[1]!='' else cols[0] for cols in df_.columns.to_flat_index()]
+                                   if cols[0] !='' else cols[1] for cols in df_.columns.to_flat_index()]
                 df_.columns = [cols.strip() for cols in df_.columns]
 
                 df_.columns = [re.sub(" ~ Sex:Total","", cols) for cols in df_.columns]
@@ -230,10 +232,8 @@ def INERentalDistributionAtlas(municipality_code=None):
         "Sections": sections
     })
 
-def INEPopulationAnualCensus(municipality_code = None):
-
-    os.makedirs('data/INEPopulationAnualCensus', exist_ok=True)
-    filename = "data/INEPopulationAnualCensus/df.tsv"
+def INEPopulationAnualCensus(path,municipality_code,years):
+    filename = f"{path}/df.tsv"
 
     if not os.path.exists(filename):
 
@@ -266,7 +266,7 @@ def INEPopulationAnualCensus(municipality_code = None):
                 r = requests.get(url)
                 r.encoding = 'utf-8'
                 df_ = pd.read_csv(StringIO(r.text), sep="\t", encoding="utf-8", dtype={3:'str',6:'str'})
-
+                df.to_csv("census.csv")
                 cols = df_.columns
                 if all([col in cols for col in ['Total Nacional', 'Provincias', 'Municipios', 'Secciones']]):
                     df_['Provincias'] = df_['Provincias'].fillna(df_['Total Nacional'])
@@ -350,7 +350,8 @@ def INEPopulationAnualCensus(municipality_code = None):
                     df_.columns = [re.sub(f" ~ {subgroup}:Total","", cols) for cols in df_.columns]
 
                 df_ = df_.reset_index()
-
+                df_.to_csv('census2.csv')
+                df.to_csv('census1.csv')
                 if len(df)>0:
                     df = pd.merge(df,df_[[col for col in df_.columns if col not in df.columns or col=="Location"]],
                                   on="Location")
@@ -410,10 +411,10 @@ def INEPopulationAnualCensus(municipality_code = None):
     })
 
 
-def INEHouseholdsPriceIndex():
+def INEHouseholdsPriceIndex(path):
 
-    os.makedirs('data/INEHouseholdsPriceIndex', exist_ok=True)
-    filename = "data/INEHouseholdsPriceIndex/df.tsv"
+    filename = f"{path}/df.tsv"
+
 
     if not os.path.exists(filename):
 
@@ -474,7 +475,7 @@ def INEHouseholdsPriceIndex():
         })
 
 
-def INEEssentialCharacteristicsOfPopulationAndHouseholds(municipality_code = None):
+def INEEssentialCharacteristicsOfPopulationAndHouseholds(path,municipality_code = None):
     # Year 2021, more info:
     # https://www.ine.es/dyngs/INEbase/es/operacion.htm?c=Estadistica_C&cid=1254736177092&menu=resultados&idp=1254735572981
 
@@ -509,8 +510,8 @@ def INEEssentialCharacteristicsOfPopulationAndHouseholds(municipality_code = Non
         }
     }
 
-    os.makedirs('data/INEEssentialCharacteristicsOfPopulationAndHouseholds', exist_ok=True)
-    filename = "data/INEEssentialCharacteristicsOfPopulationAndHouseholds/df.tsv"
+    filename = f"{path}/df.tsv"
+
 
     if not os.path.exists(filename):
 
@@ -570,9 +571,9 @@ def INEMunicipalityNamesToMunicipalityCodes():
     return df
 
 
-def INEAggregatedElectricityConsumption(municipality_code = None):
-    os.makedirs('data/INECensus', exist_ok=True)
-    filename = "data/INECensus/consumption.tsv"
+def INEAggregatedElectricityConsumption(path,municipality_code = None):
+    filename = f"{path}/df.tsv"
+
     if not os.path.exists(filename):
         print("Downloading  electrical consumption...")
         DATA_CONSUMO = "https://www.ine.es/jaxi/files/tpx/en/csv_bd/59532.csv?nocab=1"
@@ -605,7 +606,7 @@ def INEAggregatedElectricityConsumption(municipality_code = None):
         "Districts": districts
     })
 
-def INECensus2021(municipality_code = None):
+def INECensus2021(path,municipality_code = None):
     DATA_CENSO2021 = "https://www.ine.es/censos2021/C2021_Indicadores.csv"
 
     censo_ingestion_urls = {
@@ -686,8 +687,8 @@ def INECensus2021(municipality_code = None):
 
         } 
     }
-    os.makedirs('data/INECensus', exist_ok=True)
-    filename = "data/INECensus/census.tsv"
+    filename = f"{path}/df.tsv"
+
 
     if not os.path.exists(filename):
         print("Downloading Censo 2021..")
@@ -737,10 +738,8 @@ def INECensus2021(municipality_code = None):
         "Sections": sections
     })
 
-def INEHouseholdsRentalPriceIndex(municipality_code = None):
-
-    os.makedirs('data/INEHouseholdsRentalPriceIndex', exist_ok=True)
-    filename = "data/INEHouseholdsRentalPriceIndex/df.tsv"
+def INEHouseholdsRentalPriceIndex(path,municipality_code = None):
+    filename = f"{path}/df.tsv"
 
     if not os.path.exists(filename):
         r = requests.get("https://www.ine.es/jaxiT3/files/t/es/csv_bd/59061.csv?nocab=1")
@@ -794,10 +793,10 @@ def INEHouseholdsRentalPriceIndex(municipality_code = None):
         "Districts": districts
     })
 
-def INEConsumerPriceIndex():
+def INEConsumerPriceIndex(path):
 
-    os.makedirs('data/INEConsumerPriceIndex', exist_ok=True)
-    filename = "data/INEConsumerPriceIndex/df.tsv"
+    filename = f"{path}/df.tsv"
+
 
     if not os.path.exists(filename):
         r = requests.get("https://www.ine.es/jaxiT3/files/t/es/csv_bd/23708.csv?nocab=1")
