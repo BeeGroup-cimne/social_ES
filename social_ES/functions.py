@@ -16,11 +16,6 @@ def available_collections():
     return collections
 
 
-def retrieve_data(collection, years, municip):
-    
-    return dfs
-
-
 def download(wd='data',collections=None,years=None,municip=None,fg=False):
     if collections == None:
         collections = available_collections()
@@ -35,10 +30,6 @@ def download(wd='data',collections=None,years=None,municip=None,fg=False):
 
         os.makedirs(path,exist_ok=True)
         func = getattr(utils_INE,collec)
-        df = func(path=path,municipality_code=municip,years=years)
-        with open(f'output2.txt', 'w',) as f :
-            f.write(json.dumps(df))
-        print(df)
+        func(path=path,municipality_code=municip,years=years)
 
-
-download(collections=['INEPopulationAnualCensus'])
+download(collections=['INEConsumerPriceIndex'])

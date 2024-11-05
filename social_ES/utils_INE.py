@@ -147,13 +147,20 @@ def INERentalDistributionAtlas(path, municipality_code, years):
                 df_["District code"] = df_["Distritos"].astype(str).str[5:7]
                 df_["Section code"] = df_["Sections"].astype(str).str[7:10]
                 try:
-                    df_["Year"] = df_["Periodo"]
+                    time = "Periodo"
+                    df_["Year"] = df_[time]
+                    
                 except KeyError:
-                    df_["Year"] = df_["Period"]
+                    print(df_.columns)
+                    time = "Period"
+                    df_["Year"] = df_[time]
+                    print("treated")
+                    
                 df_["Value"] = df_["Total"]
                 df_["Value"] = pd.to_numeric(df_["Total"].astype(str).str.replace('.', '').str.replace(',', '.'), errors="coerce")
                 df_ = df_.sort_values(by='Value', na_position='last')
-                df_ = df_.drop(columns=["Municipalities","Distritos","Sections","Periodo","Total"])
+                
+                df_ = df_.drop(columns=["Municipalities","Distritos","Sections",time,"Total"])
                 df_ = df_.drop_duplicates([col for col in df_.columns if col not in 'Value'])
                 if "Nationality" in df_.columns:
                     df_["Nationality"] = df_["Nationality"].replace({"Extranjera":"Foreign"})
@@ -251,7 +258,8 @@ def INEPopulationAnualCensus(path,municipality_code,years):
             req = requests.get(f'{base_link}{url}',headers={'User-Agent': 'Mozilla/5'})
             x = [re.search(r'(tpx=)(?P<x>\w+)(&L)', link).group('x') for link in
                  get_links_that_contain("Export", req.text)]
-            g_ids.append(x)
+            if x != []:
+                g_ids.append(x)
 
         g_urls = [[f"https://www.ine.es/jaxi/files/tpx/es/csv_bd/{id}.csv?nocab=1" for id in ids] for ids in g_ids]
         g_df = pd.DataFrame()
@@ -350,8 +358,7 @@ def INEPopulationAnualCensus(path,municipality_code,years):
                     df_.columns = [re.sub(f" ~ {subgroup}:Total","", cols) for cols in df_.columns]
 
                 df_ = df_.reset_index()
-                df_.to_csv('census2.csv')
-                df.to_csv('census1.csv')
+                   
                 if len(df)>0:
                     df = pd.merge(df,df_[[col for col in df_.columns if col not in df.columns or col=="Location"]],
                                   on="Location")
@@ -411,7 +418,7 @@ def INEPopulationAnualCensus(path,municipality_code,years):
     })
 
 
-def INEHouseholdsPriceIndex(path):
+def INEHouseholdsPriceIndex(path,municipality_code,years):
 
     filename = f"{path}/df.tsv"
 
@@ -475,7 +482,7 @@ def INEHouseholdsPriceIndex(path):
         })
 
 
-def INEEssentialCharacteristicsOfPopulationAndHouseholds(path,municipality_code = None):
+def INEEssentialCharacteristicsOfPopulationAndHouseholds(path,municipality_code = None, years=None):
     # Year 2021, more info:
     # https://www.ine.es/dyngs/INEbase/es/operacion.htm?c=Estadistica_C&cid=1254736177092&menu=resultados&idp=1254735572981
 
@@ -557,7 +564,7 @@ def INEEssentialCharacteristicsOfPopulationAndHouseholds(path,municipality_code 
                         else:
                             dfHouseholdArea = dfHouseholdArea.merge(df_)
 
-                    df_.to_csv("test.csv", index=False)
+                    df_.to_csv(filename, index=False)
 
 
 def INEMunicipalityNamesToMunicipalityCodes():
@@ -571,7 +578,7 @@ def INEMunicipalityNamesToMunicipalityCodes():
     return df
 
 
-def INEAggregatedElectricityConsumption(path,municipality_code = None):
+def INEAggregatedElectricityConsumption(path,municipality_code = None, years=None):
     filename = f"{path}/df.tsv"
 
     if not os.path.exists(filename):
@@ -606,7 +613,7 @@ def INEAggregatedElectricityConsumption(path,municipality_code = None):
         "Districts": districts
     })
 
-def INECensus2021(path,municipality_code = None):
+def INECensus2021(path,municipality_code = None, years=None):
     DATA_CENSO2021 = "https://www.ine.es/censos2021/C2021_Indicadores.csv"
 
     censo_ingestion_urls = {
@@ -708,8 +715,6 @@ def INECensus2021(path,municipality_code = None):
             for op_code, operations in censo_ingestion_urls[x]['columns'].items():
                 operation_dict.get(op_code)(data,operations)
             
-            # Fill missing values (data ingestion)
-            g_df = g_df.set_index('Municipality code').fillna(data.set_index('Municipality code')).reset_index()
 
         g_df.to_csv(filename,sep="\t", index=False)
 
@@ -738,7 +743,7 @@ def INECensus2021(path,municipality_code = None):
         "Sections": sections
     })
 
-def INEHouseholdsRentalPriceIndex(path,municipality_code = None):
+def INEHouseholdsRentalPriceIndex(path,municipality_code = None,  years=None):
     filename = f"{path}/df.tsv"
 
     if not os.path.exists(filename):
@@ -793,7 +798,7 @@ def INEHouseholdsRentalPriceIndex(path,municipality_code = None):
         "Districts": districts
     })
 
-def INEConsumerPriceIndex(path):
+def INEConsumerPriceIndex(path,municipality_code = None,  years=None):
 
     filename = f"{path}/df.tsv"
 
