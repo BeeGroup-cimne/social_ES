@@ -226,6 +226,8 @@ def INERentalDistributionAtlas(path, municipality_code, years):
 
     g_df["Country code"] = "ES"
     g_df["Province code"] = g_df["Municipality code"].str[:2]
+    if years != None:
+        g_df = g_df[g_df['Year'].isin(years)]
     municipality = g_df[pd.isna(g_df["District code"]) & pd.isna(g_df["Section code"])]
     municipality = municipality[municipality.columns[municipality.notna().any()]]
     districts = g_df[-pd.isna(g_df["District code"]) & pd.isna(g_df["Section code"])]
@@ -238,6 +240,7 @@ def INERentalDistributionAtlas(path, municipality_code, years):
         "Districts": districts,
         "Sections": sections
     })
+    
 
 def INEPopulationAnualCensus(path,municipality_code,years):
     filename = f"{path}/df.tsv"
@@ -274,18 +277,17 @@ def INEPopulationAnualCensus(path,municipality_code,years):
                 r = requests.get(url)
                 r.encoding = 'utf-8'
                 df_ = pd.read_csv(StringIO(r.text), sep="\t", encoding="utf-8", dtype={3:'str',6:'str'})
-                df.to_csv("census.csv")
+                df_.to_csv("census.csv")
                 cols = df_.columns
                 if all([col in cols for col in ['Total Nacional', 'Provincias', 'Municipios', 'Secciones']]):
                     df_['Provincias'] = df_['Provincias'].fillna(df_['Total Nacional'])
                     df_['Municipios'] = df_['Municipios'].fillna(df_['Provincias'])
-                    df_['Secciones'] = df_['Secciones'].fillna(df_['Municipios'])
-                    df_ = df_.drop(columns = ['Total Nacional', 'Provincias', 'Municipios'])
+                    df_['Sección censal'] = df_['Secciones'].str[0:10].fillna(df_['Municipios'])
+                    df_ = df_.drop(columns = ['Secciones','Total Nacional', 'Provincias', 'Municipios'])
                     cols = df_.columns
 
                 allcols = {
                     "Sección censal": "Location",
-                    "Secciones": "Location",
                     "Sexo": "Sex",
                     "Lugar de nacimiento (España/extranjero)": "Place of birth",
                     "Nacionalidad (española/extranjera)": "Nationality",
@@ -296,7 +298,7 @@ def INEPopulationAnualCensus(path,municipality_code,years):
 
                 df_ = df_.rename(columns={col:allcols[col] for col in cols})
                 cols = df_.columns
-
+                print(cols)
                 if "Sex" in cols:
                     df_["Sex"] = df_["Sex"].replace({
                         "Hombre": "Males",
@@ -342,7 +344,7 @@ def INEPopulationAnualCensus(path,municipality_code,years):
                                columns=[col for col in df_.columns if col not in
                                         ['Location', 'Year', 'Value']],
                                values="Value")
-
+                df_.to_csv('pivot.csv')
                 subgroups = ["Nationality", "Age", "Sex", "Place of birth", "Detailed place of birth"]
                 if isinstance(df_.columns, pd.MultiIndex):
                     allcols = df_.columns.names
@@ -390,7 +392,7 @@ def INEPopulationAnualCensus(path,municipality_code,years):
         g_df.to_csv(filename,sep="\t", index=False)
 
     else:
-        g_df = pd.read_csv(filename, sep="\t")
+        g_df = pd.read_csv(filename, sep="\t", dtype={0:'str',1:'str',2:'str',3:'str'})
 
     if municipality_code is not None:
         if type(municipality_code) == str:
@@ -398,20 +400,18 @@ def INEPopulationAnualCensus(path,municipality_code,years):
         elif type(municipality_code) == list:
             g_df = g_df[g_df["Municipality code"].isin(municipality_code)]
 
-    # national = g_df[pd.isna(g_df["Province code"]) & pd.isna(g_df["Municipality code"]) & pd.isna(g_df["District code"]) & pd.isna(g_df["Section code"])]
-    # national = national[national.columns[national.notna().any()]]
-    # province = g_df[-pd.isna(g_df["Province code"]) & pd.isna(g_df["Municipality code"]) & pd.isna(g_df["District code"]) & pd.isna(g_df["Section code"])]
-    # province = province[province.columns[province.notna().any()]]
-    municipality = g_df[-pd.isna(g_df["Province code"]) & -pd.isna(g_df["Municipality code"]) & pd.isna(g_df["District code"]) & pd.isna(g_df["Section code"])]
+    g_df["Country code"] = "ES"
+    g_df["Province code"] = g_df["Municipality code"].str[:2]
+    if years != None:
+        g_df = g_df[g_df['Year'].isin(years)]
+    municipality = g_df[pd.isna(g_df["District code"]) & pd.isna(g_df["Section code"])]
     municipality = municipality[municipality.columns[municipality.notna().any()]]
-    districts = g_df[-pd.isna(g_df["Province code"]) & -pd.isna(g_df["Municipality code"]) & -pd.isna(g_df["District code"]) & pd.isna(g_df["Section code"])]
+    districts = g_df[-pd.isna(g_df["District code"]) & pd.isna(g_df["Section code"])]
     districts = districts[districts.columns[districts.notna().any()]]
-    sections = g_df[-pd.isna(g_df["Province code"]) & -pd.isna(g_df["Municipality code"]) & -pd.isna(g_df["District code"]) & -pd.isna(g_df["Section code"])]
+    sections = g_df[-pd.isna(g_df["District code"]) & -pd.isna(g_df["Section code"])]
     sections = sections[sections.columns[sections.notna().any()]]
 
     return ({
-        # "National": national,
-        # "Province": province,
         "Municipality": municipality,
         "Districts": districts,
         "Sections": sections
@@ -419,9 +419,7 @@ def INEPopulationAnualCensus(path,municipality_code,years):
 
 
 def INEHouseholdsPriceIndex(path,municipality_code,years):
-
     filename = f"{path}/df.tsv"
-
 
     if not os.path.exists(filename):
 
@@ -476,7 +474,16 @@ def INEHouseholdsPriceIndex(path,municipality_code,years):
 
     else:
         df_prov = pd.read_csv(filename, sep="\t")
-
+    if years != None:
+        df_prov = df_prov[df_prov['Year'].isin(years)]  
+    if municipality_code is not None:
+        if type(municipality_code) == str:
+            df_prov = df_prov[(df_prov["Province code"] == municipality_code.str[0:2]).values]
+        elif type(municipality_code) == list:
+            municipality_code = pd.Series(municipality_code)
+            df_prov = df_prov[df_prov["Province code"].isin(municipality_code.str[0:2])]
+        
+    
     return ({
             "Province": df_prov
         })
@@ -591,7 +598,7 @@ def INEAggregatedElectricityConsumption(path,municipality_code = None, years=Non
         g_df['Municipality name'] = g_df['Distritos'].str.extract(r"^\d*(.+?)\sdistrito")
         g_df = g_df.pivot_table(index=['Municipality code', 'District code', 'Municipality name'], columns='Percentil', values='Total').reset_index()
         g_df.rename(columns=lambda x: re.sub(r'Percentil (\d+) de consumo eléctrico en kwh', r'Percentile \1 of electricity consumption in kwh', x), inplace = True)
-
+        g_df['Year'] = '2021'
         g_df.to_csv(filename,sep="\t", index=False)
 
     else:
@@ -602,16 +609,17 @@ def INEAggregatedElectricityConsumption(path,municipality_code = None, years=Non
             g_df = g_df[(g_df["Municipality code"] == municipality_code).values]
         elif type(municipality_code) == list:
             g_df = g_df[g_df["Municipality code"].isin(municipality_code)]
-
-    municipality = g_df[-pd.isna(g_df["Municipality code"]) & pd.isna(g_df["District code"])]
-    municipality = municipality[municipality.columns[municipality.notna().any()]]
+            
+    if years != None:
+        g_df = g_df[g_df['Year'].isin(years)]
+    # municipality = g_df[-pd.isna(g_df["Municipality code"]) & pd.isna(g_df["District code"])]
+    # municipality = municipality[municipality.columns[municipality.notna().any()]]
     districts = g_df[-pd.isna(g_df["Municipality code"]) & -pd.isna(g_df["District code"])]
     districts = districts[districts.columns[districts.notna().any()]]
 
     return ({
-        "Municipality": municipality,
         "Districts": districts
-    })
+    }) 
 
 def INECensus2021(path,municipality_code = None, years=None):
     DATA_CENSO2021 = "https://www.ine.es/censos2021/C2021_Indicadores.csv"
@@ -726,7 +734,10 @@ def INECensus2021(path,municipality_code = None, years=None):
             g_df = g_df[(g_df["Municipality code"] == municipality_code).values]
         elif type(municipality_code) == list:
             g_df = g_df[g_df["Municipality code"].isin(municipality_code)]
-
+            
+    if years != None:
+        g_df = g_df[g_df['Year'].isin(years)]
+        
     g_df["Country code"] = "ES"
     g_df["Province code"] = g_df["Municipality code"].str[:2]
 
@@ -742,6 +753,7 @@ def INECensus2021(path,municipality_code = None, years=None):
         "Districts": districts,
         "Sections": sections
     })
+
 
 def INEHouseholdsRentalPriceIndex(path,municipality_code = None,  years=None):
     filename = f"{path}/df.tsv"
@@ -783,12 +795,14 @@ def INEHouseholdsRentalPriceIndex(path,municipality_code = None,  years=None):
             df_ = df_[(df_["Municipality code"] == municipality_code).values]
         elif type(municipality_code) == list:
             df_ = df_[df_["Municipality code"].isin(municipality_code)]
-
+            
+    if years != None:
+        df_ = df_[df_['Year'].isin(years)]
+        
     df_["Country code"] = "ES"
     df_["Province code"] = df_["Municipality code"].str[:2]
 
-    municipality = df_[-pd.isna(df_["Municipality code"]) & pd.isna(
-        df_["District code"])]
+    municipality = df_[-pd.isna(df_["Municipality code"]) & pd.isna(df_["District code"])]
     municipality = municipality[municipality.columns[municipality.notna().any()]]
     districts = df_[-pd.isna(df_["Municipality code"]) & -pd.isna(df_["District code"])]
     districts = districts[districts.columns[districts.notna().any()]]
@@ -798,11 +812,11 @@ def INEHouseholdsRentalPriceIndex(path,municipality_code = None,  years=None):
         "Districts": districts
     })
 
-def INEConsumerPriceIndex(path,municipality_code = None,  years=None):
+
+def INEConsumerPriceIndex(path,  years=None):
 
     filename = f"{path}/df.tsv"
-
-
+    
     if not os.path.exists(filename):
         r = requests.get("https://www.ine.es/jaxiT3/files/t/es/csv_bd/23708.csv?nocab=1")
         r.encoding = 'utf-8'
@@ -864,7 +878,9 @@ def INEConsumerPriceIndex(path,municipality_code = None,  years=None):
         df_.to_csv(filename, index=False, sep="\t")
     else:
         df_ = pd.read_csv(filename, sep="\t")
-
+        
+    if years != None:
+        df_ = df_[df_['Year'].isin(years)]
     return ({
         "National": df_
     })

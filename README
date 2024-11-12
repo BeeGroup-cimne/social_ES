@@ -11,14 +11,17 @@ This is a Python library to ingest the most updated Spanish socioeconomic data r
 ```python
 import socioeconomic_ES as sc
 
-# Return the available collections
+# Return the available collections.
 sc.get_collections() 
 
-#  Downloading all socioeconomic data from all available collections is the default option, but the parameters can be changed.
+# Downloading all socioeconomic data from all available collections is the default option, but the parameters can be changed.
 sc.download()
 
-# Download socioeconomic data in the `path: str` from the specified `collections: list`, `years: list`, and `municipality codes: list`. Decide whether to `force_gathering: bool` (True =  Do not take into account that datasets have already been downloaded).
-sc.download(path,['INEcensus2021'], list(range(2021,2024+1)), ['08001','08002'], False) 
+# Download socioeconomic data in the `path: str` from the specified `collections: list`, `years: list`, and `municipality codes: list`. Decide whether to `force_gathering: bool` (True =  Do not take into account that datasets have already been downloaded). 
+# Return an array with the results of its respective collection.
+res = sc.download(path,['INEcensus2021'], list(range(2021,2024+1)), ['08001','08002'], False) 
+
+res[0]['Sections'].to_csv("test.csv",index=False)
 ```
 
 ## For developers
