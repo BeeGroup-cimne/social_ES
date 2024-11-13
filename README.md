@@ -3,9 +3,11 @@
 This is a Python library to ingest the most updated Spanish socioeconomic data regarding [these](./social_ES/collections.yaml) domains.
 
 ## How to install the library?
-1- Download the repository in your own system: git clone
-2- Create library: python setup.py sdist
-2- Install library: pip install dist/socioeconomic_ES-0.0.1.tar.gz
+1. Download the repository in your own system: git clone
+
+2. Create library: python setup.py sdist
+
+3. Install library: pip install dist/social_ES-0.0.0.tar.gz
 
 ## How to use it?
 ```python
