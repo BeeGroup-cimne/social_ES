@@ -1,6 +1,6 @@
 # socioeconomic_ES
 
-This is a Python library to ingest the most updated Spanish socioeconomic data regarding ....bla bla bla. 
+This is a Python library to ingest the most updated Spanish socioeconomic data regarding [these](./social_ES/collections.yaml) domains.
 
 ## How to install the library?
 1- Download the repository in your own system: git clone

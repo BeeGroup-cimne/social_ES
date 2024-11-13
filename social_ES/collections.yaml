@@ -26,7 +26,7 @@ INE:
     url: https://www.ine.es/dyngs/Prensa/en/IPVA2022.htm
     note: Since this is an exploitation of tax sources, the geographical scope is constituted by the common fiscal territory (that is, the entire national territory except the Comunidad Foral de Navarra and País Vasco). Municipalities with less than 10,000 inhabitants in each province are grouped into a single category.
   INEConsumerPriceIndex:
-    attributes: 
+    attributes: CPI 2015 base ~ different classes of products
     spatial granularity: National
     years: 1997-2024
     url: https://www.ine.es/dyngs/INEbase/en/operacion.htm?c=Estadistica_C&cid=1254736176802&menu=ultiDatos&idp=1254735976607
