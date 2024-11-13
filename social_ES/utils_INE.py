@@ -151,10 +151,8 @@ def INERentalDistributionAtlas(path, municipality_code, years):
                     df_["Year"] = df_[time]
                     
                 except KeyError:
-                    print(df_.columns)
                     time = "Period"
                     df_["Year"] = df_[time]
-                    print("treated")
                     
                 df_["Value"] = df_["Total"]
                 df_["Value"] = pd.to_numeric(df_["Total"].astype(str).str.replace('.', '').str.replace(',', '.'), errors="coerce")
@@ -217,7 +215,8 @@ def INERentalDistributionAtlas(path, municipality_code, years):
 
     else:
         g_df = pd.read_csv(filename, sep="\t", dtype={0:'str',1:'str',2:'str',3:'str'})
-
+    if years != None:
+        g_df = g_df[g_df['Year'].isin(years)]
     if municipality_code is not None:
         if type(municipality_code) == str:
             g_df = g_df[(g_df["Municipality code"] == municipality_code).values]
@@ -226,8 +225,7 @@ def INERentalDistributionAtlas(path, municipality_code, years):
 
     g_df["Country code"] = "ES"
     g_df["Province code"] = g_df["Municipality code"].str[:2]
-    if years != None:
-        g_df = g_df[g_df['Year'].isin(years)]
+    
     municipality = g_df[pd.isna(g_df["District code"]) & pd.isna(g_df["Section code"])]
     municipality = municipality[municipality.columns[municipality.notna().any()]]
     districts = g_df[-pd.isna(g_df["District code"]) & pd.isna(g_df["Section code"])]
@@ -298,7 +296,6 @@ def INEPopulationAnualCensus(path,municipality_code,years):
 
                 df_ = df_.rename(columns={col:allcols[col] for col in cols})
                 cols = df_.columns
-                print(cols)
                 if "Sex" in cols:
                     df_["Sex"] = df_["Sex"].replace({
                         "Hombre": "Males",
@@ -344,7 +341,6 @@ def INEPopulationAnualCensus(path,municipality_code,years):
                                columns=[col for col in df_.columns if col not in
                                         ['Location', 'Year', 'Value']],
                                values="Value")
-                df_.to_csv('pivot.csv')
                 subgroups = ["Nationality", "Age", "Sex", "Place of birth", "Detailed place of birth"]
                 if isinstance(df_.columns, pd.MultiIndex):
                     allcols = df_.columns.names
@@ -382,7 +378,7 @@ def INEPopulationAnualCensus(path,municipality_code,years):
         g_df = g_df.drop(columns=["Location"])
 
         district = g_df.groupby(["Country code", "Province code", "Municipality code", "District code", "Year"])[
-            [col for col in g_df.columns if col not in ["Country code", "Province code", "Municipality code", "District code", "Year","Section code"]]
+            [col for col in g_df.columns if col not in ["Country code", "Province code", "Municipality code", "District code","Section code","Year"]]
             ].sum()
         district["Section code"] = np.nan
         district = district.set_index("Section code", append=True)
@@ -392,8 +388,7 @@ def INEPopulationAnualCensus(path,municipality_code,years):
         g_df.to_csv(filename,sep="\t", index=False)
 
     else:
-        g_df = pd.read_csv(filename, sep="\t", dtype={0:'str',1:'str',2:'str',3:'str'})
-
+        g_df = pd.read_csv(filename, sep="\t", dtype={0:'str',1:'str',2:'str',3:'str',5:'str'})
     if municipality_code is not None:
         if type(municipality_code) == str:
             g_df = g_df[(g_df["Municipality code"] == municipality_code).values]
@@ -473,7 +468,7 @@ def INEHouseholdsPriceIndex(path,municipality_code,years):
         df_prov.to_csv(filename,sep="\t", index=False)
 
     else:
-        df_prov = pd.read_csv(filename, sep="\t")
+        df_prov = pd.read_csv(filename, sep="\t",dtype={0:'str',1:'str',2:'str',3:'str'})
     if years != None:
         df_prov = df_prov[df_prov['Year'].isin(years)]  
     if municipality_code is not None:
@@ -723,12 +718,11 @@ def INECensus2021(path,municipality_code = None, years=None):
             for op_code, operations in censo_ingestion_urls[x]['columns'].items():
                 operation_dict.get(op_code)(data,operations)
             
-
+        g_df['Year'] = '2021'
         g_df.to_csv(filename,sep="\t", index=False)
 
     else:
         g_df = pd.read_csv(filename,sep="\t",dtype={0:str,1:str,2:str})
-
     if municipality_code is not None:
         if type(municipality_code) == str:
             g_df = g_df[(g_df["Municipality code"] == municipality_code).values]
@@ -741,17 +735,8 @@ def INECensus2021(path,municipality_code = None, years=None):
     g_df["Country code"] = "ES"
     g_df["Province code"] = g_df["Municipality code"].str[:2]
 
-    municipality = g_df[pd.isna(g_df["District code"]) & pd.isna(g_df["Section code"])]
-    municipality = municipality[municipality.columns[municipality.notna().any()]]
-    districts = g_df[-pd.isna(g_df["District code"]) & pd.isna(g_df["Section code"])]
-    districts = districts[districts.columns[districts.notna().any()]]
-    sections = g_df[-pd.isna(g_df["District code"]) & -pd.isna(g_df["Section code"])]
-    sections = sections[sections.columns[sections.notna().any()]]
-
     return ({
-        "Municipality": municipality,
-        "Districts": districts,
-        "Sections": sections
+        "Sections": g_df
     })
 
 
@@ -788,8 +773,7 @@ def INEHouseholdsRentalPriceIndex(path,municipality_code = None,  years=None):
 
         df_.to_csv(filename, index=False, sep="\t")
     else:
-        df_ = pd.read_csv(filename, sep="\t")
-
+        df_ = pd.read_csv(filename, sep="\t",dtype={0:'str',1:'int',2:'str'})
     if municipality_code is not None:
         if type(municipality_code) == str:
             df_ = df_[(df_["Municipality code"] == municipality_code).values]
@@ -813,7 +797,7 @@ def INEHouseholdsRentalPriceIndex(path,municipality_code = None,  years=None):
     })
 
 
-def INEConsumerPriceIndex(path,  years=None):
+def INEConsumerPriceIndex(path, municipality_code=None, years=None):
 
     filename = f"{path}/df.tsv"
     
@@ -877,8 +861,7 @@ def INEConsumerPriceIndex(path,  years=None):
 
         df_.to_csv(filename, index=False, sep="\t")
     else:
-        df_ = pd.read_csv(filename, sep="\t")
-        
+        df_ = pd.read_csv(filename, sep="\t",dtype={0:'str',1:'int',2:'str'})
     if years != None:
         df_ = df_[df_['Year'].isin(years)]
     return ({

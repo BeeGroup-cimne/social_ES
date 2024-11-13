@@ -1,1 +1,1 @@
-from .functions import download, merge
+from .functions import available_collections, info_collections, download

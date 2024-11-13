@@ -3,3 +3,5 @@ data
 __pycache__
 *.csv
 *.ipynb
+social_ES.egg-info
+dist
