@@ -238,100 +238,159 @@ def INERentalDistributionAtlas(path, municipality_code, years):
         "Districts": districts,
         "Sections": sections
     })
-    
 
-def INEPopulationAnualCensus(path,municipality_code,years):
-    filename = f"{path}/df.tsv"
 
-    if not os.path.exists(filename):
+def INEPopulationAnualCensus(path,municipality_code=None,years=None):
 
-        print("Reading the metadata to gather the INE population and household anual census", file=sys.stdout)
-        base_link = "https://www.ine.es/dynt3/inebase/es/index.htm"
-        sections_link = "?padre=10358"
-        req = requests.get(f"{base_link}{sections_link}", headers={'User-Agent': 'Chrome/51.0.2704.103'})
-        sections_link = get_links_that_contain("capsel", req.text)[-1]
-        req = requests.get(f"{base_link}{sections_link}",headers={'User-Agent': 'Chrome/51.0.2704.103'})
-        urls = get_links_that_contain("capsel", req.text)
-        urls = urls[urls.index(sections_link)+1:]
-        g_ids = []
+    g_df = pd.DataFrame()
+    province_codes = [i + 1 for i in list(range(52))]
 
-        for url in urls:
-            req = requests.get(f'{base_link}{url}',headers={'User-Agent': 'Mozilla/5'})
-            x = [re.search(r'(tpx=)(?P<x>\w+)(&L)', link).group('x') for link in
-                 get_links_that_contain("Export", req.text)]
-            if x != []:
-                g_ids.append(x)
+    print("Reading the metadata to gather the INE population and household anual census", file=sys.stdout)
+    base_link = "https://www.ine.es/dynt3/inebase/es/index.htm"
+    sections_link = "?padre=11100"
+    req = requests.get(f"{base_link}{sections_link}", headers={'User-Agent': 'Chrome/51.0.2704.103'})
+    sections_link = get_links_that_contain("capsel", req.text)[-1]
+    req = requests.get(f"{base_link}{sections_link}", headers={'User-Agent': 'Chrome/51.0.2704.103'})
+    urls = get_links_that_contain("capsel", req.text)
+    urls = urls[urls.index(sections_link) + 1:]
+    g_ids = []
 
-        g_urls = [[f"https://www.ine.es/jaxi/files/tpx/es/csv_bd/{id}.csv?nocab=1" for id in ids] for ids in g_ids]
-        g_df = pd.DataFrame()
-        year = 2021
+    for url in urls:
+        req = requests.get(f'{base_link}{url}', headers={'User-Agent': 'Mozilla/5'})
+        x = [re.search(r'(t=)(?P<x>\w+)(&L)', link).group('x') for link in
+             get_links_that_contain("Export", req.text)]
+        if x != []:
+            g_ids.append(x)
 
-        for urls in tqdm(g_urls, desc="Downloading files from INE by year..."):
+    g_urls = [[f"https://www.ine.es/jaxi/files/t/es/csv_bd/{id}.csv?nocab=1" for id in ids] for ids in g_ids]
+
+    for pc in tqdm(province_codes, desc="Downloading data from INE..."):
+        filename = f"{path}/{pc-1}.parquet"
+
+        if not os.path.exists(filename):
+            # g_df = pd.DataFrame()
+            # for urls in tqdm(g_urls, desc="Downloading files from INE..."):
 
             df = pd.DataFrame()
 
+            urls = g_urls[pc-1]
             for url in urls:
-
+                #url=urls[0]
                 r = requests.get(url)
                 r.encoding = 'utf-8'
                 df_ = pd.read_csv(StringIO(r.text), sep="\t", encoding="utf-8", dtype={3:'str',6:'str'})
-                df_.to_csv("census.csv")
                 cols = df_.columns
-                if all([col in cols for col in ['Total Nacional', 'Provincias', 'Municipios', 'Secciones']]):
-                    df_['Provincias'] = df_['Provincias'].fillna(df_['Total Nacional'])
+                if all([col in cols for col in ['Provincias', 'Municipios', 'Secciones']]):
                     df_['Municipios'] = df_['Municipios'].fillna(df_['Provincias'])
                     df_['Sección censal'] = df_['Secciones'].str[0:10].fillna(df_['Municipios'])
-                    df_ = df_.drop(columns = ['Secciones','Total Nacional', 'Provincias', 'Municipios'])
+                    df_ = df_.drop(columns = ['Secciones', 'Provincias', 'Municipios'])
                     cols = df_.columns
 
                 allcols = {
                     "Sección censal": "Location",
                     "Sexo": "Sex",
-                    "Lugar de nacimiento (España/extranjero)": "Place of birth",
-                    "Nacionalidad (española/extranjera)": "Nationality",
-                    "Relación entre lugar de nacimiento y lugar de residencia": "Detailed place of birth",
+                    "Lugar de nacimiento": "Birth origin",
+                    "País de nacimiento": "Birth country",
+                    "Nacionalidad": "Nationality",
+                    "Relación entre lugar de nacimiento y lugar de residencia": "Birth origin in Spain",
                     "Total": "Value",
-                    "Edad (grupos quinquenales)": "Age"
+                    "Periodo": "Year",
+                    "Edad": "Age"
                 }
 
                 df_ = df_.rename(columns={col:allcols[col] for col in cols})
                 cols = df_.columns
                 if "Sex" in cols:
                     df_["Sex"] = df_["Sex"].replace({
-                        "Hombre": "Males",
-                        "Mujer": "Females",
-                        "Ambos sexos": "Total"
+                        "Hombres": "Males",
+                        "Mujeres": "Females",
+                        "Total": "Total"
                     })
 
-                if "Place of birth" in cols:
-                    df_["Place of birth"] = df_["Place of birth"].replace({
+                if "Birth country" in df_.columns:
+                    df_["Birth country"] = df_["Birth country"].replace({
+                        "Total": "Total",
                         "España": "Spain",
-                        "Extranjero": "Foreign country"
+                        "Francia": "France",
+                        "Reino Unido": "United Kingdom",
+                        "Rumanía": "Romania",
+                        "Ucrania": "Ukraine",
+                        "Otros países de Europa": "Other European countries",
+                        "Marruecos": "Morocco",
+                        "Otros países de África": "Other African countries",
+                        "Cuba": "Cuba",
+                        "República Dominicana": "Dominican Republic",
+                        "Argentina": "Argentina",
+                        "Bolivia": "Bolivia",
+                        "Colombia": "Colombia",
+                        "Ecuador": "Ecuador",
+                        "Perú": "Peru",
+                        "Venezuela": "Venezuela",
+                        "Otros países de América": "Other American countries",
+                        "China": "China",
+                        "Otros países de Asia": "Other Asian countries",
+                        "Oceanía": "Oceania"
                     })
+                    df_ = df_[df_["Birth country"] != "Total"]
+
+                if "Birth origin" in cols:
+                    df_["Birth origin"] = df_["Birth origin"].replace({
+                        "Total": "Total",
+                        "España": "Spain",
+                        "Extranjera": "Foreign country"
+                    })
+                    df_ = df_[df_["Birth origin"] != "Total"]
 
                 if "Nationality" in cols:
                     df_["Nationality"] = df_["Nationality"].replace({
+                        "Total": "Total",
                         "Española": "Spanish",
-                        "Extranjera": "Foreign"
+                        "Extranjera": "Foreign",
+                        "Francia": "French",
+                        "Reino Unido": "British",
+                        "Rumanía": "Romanian",
+                        "Ucrania": "Ukrainian",
+                        "Otros países de Europa": "Other European nationalities",
+                        "Marruecos": "Moroccan",
+                        "Otros países de África": "Other African nationalities",
+                        "Cuba": "Cuban",
+                        "República Dominicana": "Dominican",
+                        "Argentina": "Argentinian",
+                        "Bolivia": "Bolivian",
+                        "Colombia": "Colombian",
+                        "Ecuador": "Ecuadorian",
+                        "Perú": "Peruvian",
+                        "Venezuela": "Venezuelan",
+                        "Otros países de América": "Other American nationalities",
+                        "China": "Chinese",
+                        "Otros países de Asia": "Other Asian nationalities",
+                        "Oceanía": "Oceanian",
+                        "Apátridas": "Stateless"
                     })
+                    if len(df_["Nationality"].unique())>5:
+                        df_ = df_[df_["Nationality"]!="Total"]
 
-                if "Detailed place of birth" in cols:
-                    df_["Detailed place of birth"] = df_["Detailed place of birth"].replace({
-                        "Mismo municipio": "Born in the same municipality",
+
+                if "Birth origin in Spain" in cols:
+                    df_["Birth origin in Spain"] = df_["Birth origin in Spain"].replace({
+                        "Total": "Total",
+                        "Mismo municipio al de residencia": "Born in the same municipality",
                         "Distinto municipio de la misma provincia": "Born in a municipality of the same province",
                         "Distinta provincia de la misma comunidad": "Born in a municipality of the same autonomous community",
                         "Distinta comunidad": "Born in a municipality of another autonomous community",
                         "Nacido en el extranjero": "Born in another country"
                     })
+                    df_ = df_[df_["Birth origin in Spain"] != "Total"]
 
                 if "Age" in cols:
-                    df_["Age"] = df_["Age"].str.replace("De ","").\
+                    df_["Age"] = df_["Age"].str.replace("Todas las edades","Total").\
+                        str.replace("De ","").\
                         str.replace(" años","").\
                         str.replace(" a ","-").\
                         str.replace(" y más","").\
                         str.replace("100",">99")
+                    df_ = df_[df_["Age"] != "Total"]
 
-                df_["Year"] = year
                 df_["Value name"] = "Population"
                 df_["Value"] = pd.to_numeric(df_["Value"].astype(str).str.replace(',', '').str.replace('.', ''), errors="coerce")
 
@@ -341,7 +400,7 @@ def INEPopulationAnualCensus(path,municipality_code,years):
                                columns=[col for col in df_.columns if col not in
                                         ['Location', 'Year', 'Value']],
                                values="Value")
-                subgroups = ["Nationality", "Age", "Sex", "Place of birth", "Detailed place of birth"]
+                subgroups = ["Nationality", "Age", "Sex", "Birth country", "Birth origin", "Birth origin in Spain"]
                 if isinstance(df_.columns, pd.MultiIndex):
                     allcols = df_.columns.names
                     maincol = [col for col in allcols if col not in subgroups]
@@ -356,39 +415,43 @@ def INEPopulationAnualCensus(path,municipality_code,years):
                     df_.columns = [re.sub(f" ~ {subgroup}:Total","", cols) for cols in df_.columns]
 
                 df_ = df_.reset_index()
-                   
+
                 if len(df)>0:
-                    df = pd.merge(df,df_[[col for col in df_.columns if col not in df.columns or col=="Location"]],
-                                  on="Location")
+                    df = pd.merge(df,df_[[col for col in df_.columns if col not in df.columns or col=="Location" or col=="Year"]],
+                                  on=["Location","Year"])
                 else:
                     df = df_
 
-            year = year + 1
-            if len(g_df)>0:
-                g_df = pd.concat([g_df,df[g_df.columns]])
-            else:
-                g_df = df
+                del df_
 
-        g_df["Country code"] = "ES"
-        g_df["Location"] = g_df["Location"].replace({"Total Nacional":""})
-        g_df["Province code"] = np.where(g_df["Location"].str[0].apply(is_number), g_df["Location"].str[0:2], np.nan)
-        g_df["Municipality code"] = np.where(g_df["Location"].str[2].apply(is_number), g_df["Location"].str[0:5], np.nan)
-        g_df["District code"] = np.where(g_df["Location"].str[5].apply(is_number), g_df["Location"].str[5:7], np.nan)
-        g_df["Section code"] = np.where(g_df["Location"].str[7].apply(is_number), g_df["Location"].str[7:10], np.nan)
-        g_df = g_df.drop(columns=["Location"])
+            # if len(g_df)>0:
+            #     g_df = pd.concat([g_df,df])
+            # else:
+            #     g_df = df
+            # del df
 
-        district = g_df.groupby(["Country code", "Province code", "Municipality code", "District code", "Year"])[
-            [col for col in g_df.columns if col not in ["Country code", "Province code", "Municipality code", "District code","Section code","Year"]]
-            ].sum()
-        district["Section code"] = np.nan
-        district = district.set_index("Section code", append=True)
-        district = district.reset_index()
-        g_df = pd.concat([g_df[district.columns], district])
+            df["Country code"] = "ES"
+            df["Location"] = df["Location"].replace({"Total Nacional":""})
+            df["Province code"] = np.where(df["Location"].str[0].apply(is_number), df["Location"].str[0:2], np.nan)
+            df["Municipality code"] = np.where(df["Location"].str[2].apply(is_number), df["Location"].str[0:5], np.nan)
+            df["District code"] = np.where(df["Location"].str[5].apply(is_number), df["Location"].str[5:7], np.nan)
+            df["Section code"] = np.where(df["Location"].str[7].apply(is_number), df["Location"].str[7:10], np.nan)
+            df = df.drop(columns=["Location"])
 
-        g_df.to_csv(filename,sep="\t", index=False)
+            district = df.groupby(["Country code", "Province code", "Municipality code", "District code", "Year"])[
+                [col for col in df.columns if col not in ["Country code", "Province code", "Municipality code", "District code","Section code","Year"]]
+                ].sum()
+            district["Section code"] = np.nan
+            district = district.set_index("Section code", append=True)
+            district = district.reset_index()
+            df = pd.concat([df[district.columns], district])
 
-    else:
-        g_df = pd.read_csv(filename, sep="\t", dtype={0:'str',1:'str',2:'str',3:'str',5:'str'})
+            df.to_parquet(filename)
+            del df
+
+        df = pd.read_parquet(filename)
+        g_df = pd.concat([g_df, df])
+
     if municipality_code is not None:
         if type(municipality_code) == str:
             g_df = g_df[(g_df["Municipality code"] == municipality_code).values]
@@ -407,9 +470,9 @@ def INEPopulationAnualCensus(path,municipality_code,years):
     sections = sections[sections.columns[sections.notna().any()]]
 
     return ({
-        "Municipality": municipality,
-        "Districts": districts,
-        "Sections": sections
+        "Municipality": municipality.reset_index(),
+        "Districts": districts.reset_index(),
+        "Sections": sections.reset_index()
     })
 
 
