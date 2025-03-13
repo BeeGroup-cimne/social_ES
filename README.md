@@ -7,7 +7,7 @@ This is a Python library to ingest the most updated Spanish socioeconomic data r
 
 2. Create library: python setup.py sdist
 
-3. Install library: pip install dist/social_ES-0.0.0.tar.gz
+3. Install library: pip install dist/social_ES-1.0.0.tar.gz
 
 ## How to use it?
 ```python
@@ -28,10 +28,10 @@ res[0]['Sections'].to_csv("test.csv",index=False)
 ```
 
 ## Sample script
-Downloads all scocioeconomic data of `02003` municipality of 2021 and 2019.
+Downloads sociodemographic and socioeconomic data of `02003` municipality of years 2021 and 2019.
 
 ```python
-import socioeconomic_ES as sc
+import social_ES as sc
 
 collections = sc.available_collections()
 res = sc.download(collections=collections,municip=['02003'],years=[2021,2019],update=False)

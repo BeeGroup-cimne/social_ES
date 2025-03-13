@@ -114,7 +114,7 @@ def RelationAutonomousCommunityAndProvince():
 
 # Gather functions for Spanish National Statistics datasets
 
-def INERentalDistributionAtlas(path, municipality_code, years):
+def INERentalDistributionAtlas(path, municipality_code=None, years=None):
 
     filename = f"{path}/df.tsv"
 
@@ -550,29 +550,32 @@ def INEHouseholdsPriceIndex(path,municipality_code,years):
 def INEEssentialCharacteristicsOfPopulationAndHouseholds(path,municipality_code = None, years=None):
     # Year 2021, more info:
     # https://www.ine.es/dyngs/INEbase/es/operacion.htm?c=Estadistica_C&cid=1254736177092&menu=resultados&idp=1254735572981
+    path = "data/INEEssentialCharacteristicsOfPopulationAndHouseholds"
+    municipality_code = "08019"
+    years=None
 
     base_link = "https://www.ine.es/dynt3/inebase/en/index.htm"
     links_to_obtain_ids = {
-        # "People": {
-        #     "Mobility": "?padre=8983&capsel=8987",
-        #     "FamilyDynamics": "?padre=8988&capsel=8992",
-        #     "SocialSupport": "?padre=8993&capsel=8997",
-        #     "FamilyOrigin": "?padre=8998&capsel=9002",
-        #     "ContactWithNewTechnologies": "?padre=9003&capsel=9007",
-        #     "LanguageKnowledge": "?padre=9008&capsel=9031"
-        # },
-        # "Homes": {
-        #     "FamilyUnit": "?padre=9545&capsel=9549",
-        #     "OneSinglePerson": "?padre=9550&capsel=9554",
-        #     "Couples": "?padre=9555&capsel=9559",
-        #     "Monoparental": "?padre=9560&capsel=9564",
-        #     "SizeCharacteristics": "?padre=9565&capsel=9569",
-        #     "Ownership": "?padre=9570&capsel=9574",
-        #     "SecondHomes": "?padre=9575&capsel=9579",
-        #     "Vehicles": "?padre=9580&capsel=9584",
-        #     "WasteSeparation": "?padre=9585&capsel=9589",
-        #     "DomesticServices": "?padre=9590&capsel=9594"
-        # },
+        "People": {
+            "Mobility": "?padre=8983&capsel=8987",
+            "FamilyDynamics": "?padre=8988&capsel=8992",
+            "SocialSupport": "?padre=8993&capsel=8997",
+            "FamilyOrigin": "?padre=8998&capsel=9002",
+            "ContactWithNewTechnologies": "?padre=9003&capsel=9007",
+            "LanguageKnowledge": "?padre=9008&capsel=9031"
+        },
+        "Homes": {
+            "FamilyUnit": "?padre=9545&capsel=9549",
+            "OneSinglePerson": "?padre=9550&capsel=9554",
+            "Couples": "?padre=9555&capsel=9559",
+            "Monoparental": "?padre=9560&capsel=9564",
+            "SizeCharacteristics": "?padre=9565&capsel=9569",
+            "Ownership": "?padre=9570&capsel=9574",
+            "SecondHomes": "?padre=9575&capsel=9579",
+            "Vehicles": "?padre=9580&capsel=9584",
+            "WasteSeparation": "?padre=9585&capsel=9589",
+            "DomesticServices": "?padre=9590&capsel=9594"
+        },
         "Households": {
             "Installations": "?padre=9595&capsel=9599",
             "MainHouseholdSizes": "?padre=9600&capsel=9604",
@@ -584,53 +587,84 @@ def INEEssentialCharacteristicsOfPopulationAndHouseholds(path,municipality_code 
 
     filename = f"{path}/df.tsv"
 
-
     if not os.path.exists(filename):
 
         print("Reading the metadata to gather the INE essential characteristics of population and households", file=sys.stdout)
-
+        mun_df = INEMunicipalityNamesToMunicipalityCodes()
+        dfs = {}
         for related_to, sections_dict in links_to_obtain_ids.items():
-            # related_to, sections_dict = list(links_to_obtain_ids.items())[0]
+            dfs[related_to] = []
+            #related_to, sections_dict = list(links_to_obtain_ids.items())[0]
             for subject, sections_link in sections_dict.items():
-                # subject, sections_link = list(sections_dict.items())[0]
+                #subject, sections_link = list(sections_dict.items())[1]
                 req = requests.get(f"{base_link}{sections_link}",headers={'User-Agent': 'Chrome/51.0.2704.103'})
                 ids = [re.search(r'(tpx=)(?P<x>\w+)(&L)', link).group('x') for link in
                  get_links_that_contain("dlgExport", req.text)]
                 urls = [f"https://www.ine.es/jaxi/files/tpx/en/csv_bd/{id}.csv?nocab=1" for id in ids]
-
-                df_BuildingTypeAndYearOfConstruction = None
-                dfNetIncomes = None
-                dfHouseholdComposition = None
-                dfHouseholdArea= None
-
                 for url in urls:
-                    # url = urls[14]
                     r = requests.get(url)
                     r.encoding = 'utf-8'
                     df_ = pd.read_csv(StringIO(r.text), sep="\t", encoding="utf-8")
-                    if (df_.columns.isin(["Municipios","Tipo de edificio","Año de construcción del edificio"]).sum()==3):
-                        if df_BuildingTypeAndYearOfConstruction is None:
-                            df_BuildingTypeAndYearOfConstruction = df_
-                        else:
-                            df_BuildingTypeAndYearOfConstruction = df_BuildingTypeAndYearOfConstruction.merge(df_)
-                    elif (df_.columns.isin(['Municipios', 'Nivel de ingresos mensuales netos del hogar']).sum()==2):
-                        if dfNetIncomes is None:
-                            dfNetIncomes = df_
-                        else:
-                            dfNetIncomes = dfNetIncomes.merge(df_)
-                    elif (df_.columns.isin(['Municipios', 'Número de miembros del hogar']).sum()==2):
-                        if dfHouseholdComposition is None:
-                            dfHouseholdComposition = df_
-                        else:
-                            dfHouseholdComposition = dfHouseholdComposition.merge(df_)
-                    elif (df_.columns.isin(['Municipios', 'Superficie útil de la vivienda']).sum()==2):
-                        if dfHouseholdArea is None:
-                            dfHouseholdArea = df_
-                        else:
-                            dfHouseholdArea = dfHouseholdArea.merge(df_)
+                    df_ = df_.rename({"Municipalities":"Municipios", "ï»¿Municipios":"Municipios"}, axis="columns")
+                    df_ = df_.merge(mun_df, left_on="Municipios", right_on="Municipality name")
+                    df_["Municipios"] = df_["Municipality code"]
+                    df_ = df_.drop(["Municipality name", "Municipality code"], axis="columns")
+                    if municipality_code is not None:
+                        df_ = df_.loc[
+                              df_["Municipios"].isin(
+                                  municipality_code if isinstance(municipality_code,list) else [municipality_code]),
+                              :]
+                    df_["Total"] = np.where(df_["Total"]==".", np.nan, df_["Total"])
+                    df_["Total"] = np.where(df_["Total"]=="..", np.nan, df_["Total"])
+                    if df_["Total"].dtype=="object":
+                        df_["Total"].str.replace(",",".").astype("float", errors="ignore")
+                    dfs[related_to].append(df_)
 
-                    df_.to_csv(filename, index=False)
+        variables_meta = {}
+        for k in dfs.keys():
+            for i in range(len(dfs[k])):
+                column_name = dfs[k][i].columns[-2]  # Get the second-to-last column name
+                column_filters = list(dfs[k][i].columns[[r not in [column_name, "Total"] for r in list(dfs[k][i].columns)]])
+                if column_name not in variables_meta:
+                    variables_meta[column_name] = {  # Store only the latest entry for each column name
+                        "Classes": list(dfs[k][i][column_name][
+                                            ~dfs[k][i][column_name].isin(
+                                                ["Total", "Total (valores absolutos)"])
+                                        ].unique()),
+                        "Total": list(dfs[k][i][column_name][
+                                          dfs[k][i][column_name].isin(
+                                              ["Total", "Total (valores absolutos)"])
+                                      ].unique())[0] if dfs[k][i][column_name].isin(
+                                              ["Total", "Total (valores absolutos)"]).any() else None,  # Assuming only one "Total" value
+                    }
+                if "FilteringVariables" in variables_meta[column_name]:
+                    variables_meta[column_name]["FilteringVariables"].append(column_filters)
+                else:
+                    variables_meta[column_name]["FilteringVariables"] = [column_filters]
+                if "ElementDfs" in variables_meta[column_name]:
+                    variables_meta[column_name]["ElementDfs"].append((k,i))
+                else:
+                    variables_meta[column_name]["ElementDfs"] = [(k,i)]
+        selected_variables = ['Nivel educativo', 'Régimen de tenencia de la vivienda', 'Disponen de segunda residencia',
+                          'Adaptada a necesidades propias del envejecimiento', 'Problema de aislamiento',
+                          'Tiene sistema de refrigeración', 'Tipo de electrodoméstico', 'Tipo de bombillas',
+                          'Aseo con inodoro / Bañera o ducha', 'Número de habitaciones',
+                          'Tipo de problemática en la zona', 'Tipo de infraestructura o servicio',
+                          'Estado de conservación', 'Accesibilidad', 'Tipo de instalación'
+                          ]
 
+        for variable in selected_variables:
+            variable_meta = variables_meta[variable]
+            df_ = dfs[][i]
+            variable = variables_meta[df_.columns[-2]]
+            classes = variables_meta[df_.columns[-2]]["Classes"]
+            total = variables_meta[df_.columns[-2]]["Total"]
+            df_[variable]
+
+        dfs.to_csv(filename, index=False)
+    else:
+        df_ = pd.read_csv(filename)
+    return df_
 
 def INEMunicipalityNamesToMunicipalityCodes():
 
