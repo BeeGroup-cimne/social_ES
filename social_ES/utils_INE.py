@@ -1,3 +1,4 @@
+import hypercadaster_ES.utils
 import pandas as pd
 from io import StringIO
 import os
@@ -7,9 +8,11 @@ from bs4 import BeautifulSoup
 from tqdm import tqdm
 import sys
 import numpy as np
+import pickle
+from scipy.interpolate import interp1d
+import ast
 
 # Generic utils
-
 def get_links_that_contain(regexp, html):
 
     soup = BeautifulSoup(html, "html.parser")
@@ -114,8 +117,10 @@ def RelationAutonomousCommunityAndProvince():
 
 # Gather functions for Spanish National Statistics datasets
 
-def INERentalDistributionAtlas(path, municipality_code=None, years=None):
+def INERentalDistributionAtlas(wd, municipality_code=None, years=None):
 
+    path = "INE/RentalDistributionAtlas"
+    path = path_creator(path, wd)
     filename = f"{path}/df.tsv"
 
     if not os.path.exists(filename):
@@ -149,15 +154,15 @@ def INERentalDistributionAtlas(path, municipality_code=None, years=None):
                 try:
                     time = "Periodo"
                     df_["Year"] = df_[time]
-                    
+
                 except KeyError:
                     time = "Period"
                     df_["Year"] = df_[time]
-                    
+
                 df_["Value"] = df_["Total"]
                 df_["Value"] = pd.to_numeric(df_["Total"].astype(str).str.replace('.', '').str.replace(',', '.'), errors="coerce")
                 df_ = df_.sort_values(by='Value', na_position='last')
-                
+
                 df_ = df_.drop(columns=["Municipalities","Distritos","Sections",time,"Total"])
                 df_ = df_.drop_duplicates([col for col in df_.columns if col not in 'Value'])
                 if "Nationality" in df_.columns:
@@ -225,7 +230,7 @@ def INERentalDistributionAtlas(path, municipality_code=None, years=None):
 
     g_df["Country code"] = "ES"
     g_df["Province code"] = g_df["Municipality code"].str[:2]
-    
+
     municipality = g_df[pd.isna(g_df["District code"]) & pd.isna(g_df["Section code"])]
     municipality = municipality[municipality.columns[municipality.notna().any()]]
     districts = g_df[-pd.isna(g_df["District code"]) & pd.isna(g_df["Section code"])]
@@ -240,7 +245,10 @@ def INERentalDistributionAtlas(path, municipality_code=None, years=None):
     })
 
 
-def INEPopulationAnualCensus(path,municipality_code=None,years=None):
+def INEPopulationAnualCensus(wd, municipality_code=None, years=None):
+
+    path = "INE/PopulationAnualCensus"
+    path = path_creator(path, wd)
 
     g_df = pd.DataFrame()
     province_codes = [i + 1 for i in list(range(52))]
@@ -476,7 +484,11 @@ def INEPopulationAnualCensus(path,municipality_code=None,years=None):
     })
 
 
-def INEHouseholdsPriceIndex(path,municipality_code,years):
+def INEHouseholdsPriceIndex(wd, municipality_code=None, years=None):
+
+    path = "INE/EssentialCharacteristicsOfPopulationAndHouseholds"
+    path = path_creator(path, wd)
+
     filename = f"{path}/df.tsv"
 
     if not os.path.exists(filename):
@@ -533,138 +545,451 @@ def INEHouseholdsPriceIndex(path,municipality_code,years):
     else:
         df_prov = pd.read_csv(filename, sep="\t",dtype={0:'str',1:'str',2:'str',3:'str'})
     if years != None:
-        df_prov = df_prov[df_prov['Year'].isin(years)]  
+        df_prov = df_prov[df_prov['Year'].isin(years)]
     if municipality_code is not None:
         if type(municipality_code) == str:
             df_prov = df_prov[(df_prov["Province code"] == municipality_code.str[0:2]).values]
         elif type(municipality_code) == list:
             municipality_code = pd.Series(municipality_code)
             df_prov = df_prov[df_prov["Province code"].isin(municipality_code.str[0:2])]
-        
-    
+
+
     return ({
             "Province": df_prov
         })
 
+def path_creator(path, wd):
+    path_to_create = []
+    for i in path.split("/"):
+        path_to_create.append(i)
+        os.makedirs(f"{wd}/" + "/".join(path_to_create), exist_ok=True)
+    return f"{wd}/{path}"
 
-def INEEssentialCharacteristicsOfPopulationAndHouseholds(path,municipality_code = None, years=None):
-    # Year 2021, more info:
-    # https://www.ine.es/dyngs/INEbase/es/operacion.htm?c=Estadistica_C&cid=1254736177092&menu=resultados&idp=1254735572981
-    path = "data/INEEssentialCharacteristicsOfPopulationAndHouseholds"
-    municipality_code = "08019"
-    years=None
 
-    base_link = "https://www.ine.es/dynt3/inebase/en/index.htm"
-    links_to_obtain_ids = {
-        "People": {
-            "Mobility": "?padre=8983&capsel=8987",
-            "FamilyDynamics": "?padre=8988&capsel=8992",
-            "SocialSupport": "?padre=8993&capsel=8997",
-            "FamilyOrigin": "?padre=8998&capsel=9002",
-            "ContactWithNewTechnologies": "?padre=9003&capsel=9007",
-            "LanguageKnowledge": "?padre=9008&capsel=9031"
-        },
-        "Homes": {
-            "FamilyUnit": "?padre=9545&capsel=9549",
-            "OneSinglePerson": "?padre=9550&capsel=9554",
-            "Couples": "?padre=9555&capsel=9559",
-            "Monoparental": "?padre=9560&capsel=9564",
-            "SizeCharacteristics": "?padre=9565&capsel=9569",
-            "Ownership": "?padre=9570&capsel=9574",
-            "SecondHomes": "?padre=9575&capsel=9579",
-            "Vehicles": "?padre=9580&capsel=9584",
-            "WasteSeparation": "?padre=9585&capsel=9589",
-            "DomesticServices": "?padre=9590&capsel=9594"
-        },
-        "Households": {
-            "Installations": "?padre=9595&capsel=9599",
-            "MainHouseholdSizes": "?padre=9600&capsel=9604",
-            "MainHouseholdContexts": "?padre=9605&capsel=9609",
-            "AccessibilityAndConservation": "?padre=9610&capsel=9614",
-            "BuildingInstallation": "?padre=9615&capsel=9619"
-        }
-    }
+def estimate_income_distribution(row):
+    # Definir puntos conocidos de la CDF: (percentil acumulado, múltiplo de la mediana)
+    cdf_percentiles = np.array([
+        row['Percentage of the population with income per consumption unit of under 40% of the median '],
+        row['Percentage of the population with income per consumption unit of under 50% of the median '],
+        row['Percentage of the population with income per consumption unit of under 60% of the median '],
+        100 - row['Population with per consumption unit income above 140% of the median'],
+        100 - row['Population with per consumption unit income above 160% of the median'],
+        100 - row['Population with per consumption unit income above 200% of the median']
+    ]) / 100  # pasar a proporciones
 
-    filename = f"{path}/df.tsv"
+    cdf_income_multipliers = np.array([0.4, 0.5, 0.6, 1.4, 1.6, 2.0])
 
-    if not os.path.exists(filename):
+    # Crear función de interpolación
+    income_cdf_fn = interp1d(
+        cdf_income_multipliers,
+        cdf_percentiles,
+        kind='linear',
+        bounds_error=False,
+        fill_value=(cdf_percentiles[0], cdf_percentiles[-1])
+    )
 
-        print("Reading the metadata to gather the INE essential characteristics of population and households", file=sys.stdout)
-        mun_df = INEMunicipalityNamesToMunicipalityCodes()
-        dfs = {}
-        for related_to, sections_dict in links_to_obtain_ids.items():
-            dfs[related_to] = []
-            #related_to, sections_dict = list(links_to_obtain_ids.items())[0]
-            for subject, sections_link in sections_dict.items():
-                #subject, sections_link = list(sections_dict.items())[1]
-                req = requests.get(f"{base_link}{sections_link}",headers={'User-Agent': 'Chrome/51.0.2704.103'})
-                ids = [re.search(r'(tpx=)(?P<x>\w+)(&L)', link).group('x') for link in
-                 get_links_that_contain("dlgExport", req.text)]
-                urls = [f"https://www.ine.es/jaxi/files/tpx/en/csv_bd/{id}.csv?nocab=1" for id in ids]
-                for url in urls:
-                    r = requests.get(url)
-                    r.encoding = 'utf-8'
-                    df_ = pd.read_csv(StringIO(r.text), sep="\t", encoding="utf-8")
-                    df_ = df_.rename({"Municipalities":"Municipios", "ï»¿Municipios":"Municipios"}, axis="columns")
-                    df_ = df_.merge(mun_df, left_on="Municipios", right_on="Municipality name")
-                    df_["Municipios"] = df_["Municipality code"]
-                    df_ = df_.drop(["Municipality name", "Municipality code"], axis="columns")
-                    if municipality_code is not None:
-                        df_ = df_.loc[
-                              df_["Municipios"].isin(
-                                  municipality_code if isinstance(municipality_code,list) else [municipality_code]),
-                              :]
-                    df_["Total"] = np.where(df_["Total"]==".", np.nan, df_["Total"])
-                    df_["Total"] = np.where(df_["Total"]=="..", np.nan, df_["Total"])
-                    if df_["Total"].dtype=="object":
-                        df_["Total"].str.replace(",",".").astype("float", errors="ignore")
-                    dfs[related_to].append(df_)
+    # Definir cortes de ingresos por hogar en múltiplos de la mediana
+    income_brackets_multipliers = [1000, 1500, 2000, 3000]
+    mediana_uc = row['Median income by unit of consumption']
+    uc_hogar = row['Unidades de consumo medio en el hogar']
+    ingreso_mediana_hogar = mediana_uc * uc_hogar / 12
 
-        variables_meta = {}
-        for k in dfs.keys():
-            for i in range(len(dfs[k])):
-                column_name = dfs[k][i].columns[-2]  # Get the second-to-last column name
-                column_filters = list(dfs[k][i].columns[[r not in [column_name, "Total"] for r in list(dfs[k][i].columns)]])
-                if column_name not in variables_meta:
-                    variables_meta[column_name] = {  # Store only the latest entry for each column name
-                        "Classes": list(dfs[k][i][column_name][
-                                            ~dfs[k][i][column_name].isin(
-                                                ["Total", "Total (valores absolutos)"])
-                                        ].unique()),
-                        "Total": list(dfs[k][i][column_name][
-                                          dfs[k][i][column_name].isin(
-                                              ["Total", "Total (valores absolutos)"])
-                                      ].unique())[0] if dfs[k][i][column_name].isin(
-                                              ["Total", "Total (valores absolutos)"]).any() else None,  # Assuming only one "Total" value
-                    }
-                if "FilteringVariables" in variables_meta[column_name]:
-                    variables_meta[column_name]["FilteringVariables"].append(column_filters)
-                else:
-                    variables_meta[column_name]["FilteringVariables"] = [column_filters]
-                if "ElementDfs" in variables_meta[column_name]:
-                    variables_meta[column_name]["ElementDfs"].append((k,i))
-                else:
-                    variables_meta[column_name]["ElementDfs"] = [(k,i)]
-        selected_variables = ['Nivel educativo', 'Régimen de tenencia de la vivienda', 'Disponen de segunda residencia',
-                          'Adaptada a necesidades propias del envejecimiento', 'Problema de aislamiento',
-                          'Tiene sistema de refrigeración', 'Tipo de electrodoméstico', 'Tipo de bombillas',
-                          'Aseo con inodoro / Bañera o ducha', 'Número de habitaciones',
-                          'Tipo de problemática en la zona', 'Tipo de infraestructura o servicio',
-                          'Estado de conservación', 'Accesibilidad', 'Tipo de instalación'
-                          ]
+    # Convertimos a múltiplos de la mediana
+    income_brackets_multipliers = [v / ingreso_mediana_hogar for v in income_brackets_multipliers]
 
-        for variable in selected_variables:
-            variable_meta = variables_meta[variable]
-            df_ = dfs[][i]
-            variable = variables_meta[df_.columns[-2]]
-            classes = variables_meta[df_.columns[-2]]["Classes"]
-            total = variables_meta[df_.columns[-2]]["Total"]
-            df_[variable]
+    # Calcular CDF en los puntos de corte
+    cdf_values = income_cdf_fn(income_brackets_multipliers)
 
-        dfs.to_csv(filename, index=False)
-    else:
-        df_ = pd.read_csv(filename)
-    return df_
+    # Obtener los porcentajes por tramos
+    p1 = cdf_values[0]  # < 1000 €
+    p2 = cdf_values[1] - cdf_values[0]  # 1000–1499 €
+    p3 = cdf_values[2] - cdf_values[1]  # 1500–1999 €
+    p4 = cdf_values[3] - cdf_values[2]  # 2000–2999 €
+    p5 = 1.0 - cdf_values[3]  # ≥ 3000 €
+
+    return pd.Series({
+        'Salario mensual neto del hogar de menos de 1.000 euros': round(p1 * 100, 1),
+        'Salario mensual neto del hogar de 1.000 euros a menos de 1.500 euros': round(p2 * 100, 1),
+        'Salario mensual neto del hogar de 1.500 euros a menos de 2.000 euros': round(p3 * 100, 1),
+        'Salario mensual neto del hogar de 2.000 euros a menos de 3.000 euros': round(p4 * 100, 1),
+        'Salario mensual neto del hogar de 3.000 euros o más': round(p5 * 100, 1),
+    })
+
+
+def estimate_nationality_households(row):
+    pct_espanoles = row['Population ~ Nationality:España'] / row['Population_y']
+
+    # Ajustamos pesos usando una distribución plausible (puedes afinar estos coeficientes)
+    pct_hogar_esp = min(1.0, pct_espanoles ** 2 + 0.1)  # hogares exclusivamente españoles
+    pct_hogar_ext = min(1.0, (1 - pct_espanoles) ** 2 + 0.1)  # hogares exclusivamente extranjeros
+    pct_hogar_mixto = 1.0 - pct_hogar_esp - pct_hogar_ext  # hogares mixtos
+
+    # Corrección si hay sobre/infraasignación
+    if pct_hogar_mixto < 0:
+        pct_hogar_mixto = 0
+        total = pct_hogar_esp + pct_hogar_ext
+        pct_hogar_esp /= total
+        pct_hogar_ext /= total
+
+    return pd.Series({
+        'Hogar exclusivamente español': round(pct_hogar_esp * 100, 1),
+        'Hogar mixto (con españoles y extranjeros)': round(pct_hogar_mixto * 100, 1),
+        'Hogar exclusivamente extranjero': round(pct_hogar_ext * 100, 1),
+    })
+
+# def INEEssentialCharacteristicsOfPopulationAndHouseholds(
+#         wd, municipality_code=None,
+#         hypercadaster_ES_input_pkl_file="/home/gmor/Nextcloud2/Beegroup/data/hypercadaster_ES/08900.pkl"):
+#     # Year 2021, more info:
+#     # https://www.ine.es/dyngs/INEbase/es/operacion.htm?c=Estadistica_C&cid=1254736177092&menu=resultados&idp=1254735572981
+#
+#     path = "INE/EssentialCharacteristicsOfPopulationAndHouseholds"
+#     path = path_creator(path, wd)
+#     filename = f"{path}/df.pkl"
+#
+#     base_link = "https://www.ine.es/dynt3/inebase/en/index.htm"
+#     links_to_obtain_ids = {
+#         "People": {
+#             # "Mobility": "?padre=8983&capsel=8987",
+#             # "FamilyDynamics": "?padre=8988&capsel=8992",
+#             # "SocialSupport": "?padre=8993&capsel=8997",
+#             # "FamilyOrigin": "?padre=8998&capsel=9002",
+#             "ContactWithNewTechnologies": "?padre=9003&capsel=9007",
+#             # "LanguageKnowledge": "?padre=9008&capsel=9031"
+#         },
+#         "Homes": {
+#             # "FamilyUnit": "?padre=9545&capsel=9549",
+#             # "OneSinglePerson": "?padre=9550&capsel=9554",
+#             # "Couples": "?padre=9555&capsel=9559",
+#             # "Monoparental": "?padre=9560&capsel=9564",
+#             # "SizeCharacteristics": "?padre=9565&capsel=9569",
+#             "Ownership": "?padre=9570&capsel=9574",
+#             "SecondHomes": "?padre=9575&capsel=9579",
+#             "Vehicles": "?padre=9580&capsel=9584",
+#             # "WasteSeparation": "?padre=9585&capsel=9589",
+#             # "DomesticServices": "?padre=9590&capsel=9594"
+#         },
+#         "Households": {
+#             "Installations": "?padre=9595&capsel=9599",
+#             "MainHouseholdSizes": "?padre=9600&capsel=9604",
+#             "MainHouseholdContexts": "?padre=9605&capsel=9609",
+#             "AccessibilityAndConservation": "?padre=9610&capsel=9614",
+#             "BuildingInstallation": "?padre=9615&capsel=9619"
+#         }
+#     }
+#
+#     if not os.path.exists(filename):
+#
+#         print("Reading the metadata to gather the INE essential characteristics of population and households", file=sys.stdout)
+#         mun_df = INEMunicipalityNamesToMunicipalityCodes()
+#         dfs = {}
+#         for related_to, sections_dict in links_to_obtain_ids.items():
+#             dfs[related_to] = []
+#             #related_to, sections_dict = list(links_to_obtain_ids.items())[0]
+#             for subject, sections_link in sections_dict.items():
+#                 #subject, sections_link = list(sections_dict.items())[1]
+#                 req = requests.get(f"{base_link}{sections_link}",headers={'User-Agent': 'Chrome/51.0.2704.103'})
+#                 ids = [re.search(r'(tpx=)(?P<x>\w+)(&L)', link).group('x') for link in
+#                  get_links_that_contain("dlgExport", req.text)]
+#                 urls = [f"https://www.ine.es/jaxi/files/tpx/es/csv_bd/{id}.csv?nocab=1" for id in ids]
+#                 for url in urls:
+#                     r = requests.get(url)
+#                     r.encoding = 'utf-8'
+#                     df_ = pd.read_csv(StringIO(r.text), sep="\t", encoding="utf-8")
+#                     df_ = df_.rename({"Municipalities":"Municipios", "ï»¿Municipios":"Municipios"}, axis="columns")
+#                     df_ = df_.merge(mun_df, left_on="Municipios", right_on="Municipality name")
+#                     df_["Municipios"] = df_["Municipality code"]
+#                     df_ = df_.drop(["Municipality name", "Municipality code"], axis="columns")
+#                     if municipality_code is not None:
+#                         df_ = df_.loc[
+#                               df_["Municipios"].isin(
+#                                   municipality_code if isinstance(municipality_code,list) else [municipality_code]),
+#                               :]
+#                     df_["Total"] = np.where(df_["Total"]==".", np.nan, df_["Total"])
+#                     df_["Total"] = np.where(df_["Total"]=="..", np.nan, df_["Total"])
+#                     if df_["Total"].dtype=="object":
+#                         df_["Total"].str.replace(",",".").astype("float", errors="ignore")
+#                     dfs[related_to].append(df_)
+#
+#         variables_meta = {}
+#         filtering_variables = {}
+#         classes_variables = {}
+#         for k in dfs.keys():
+#             for i in range(len(dfs[k])):
+#                 if "Unidad" in dfs[k][i].columns:
+#                     dfs[k][i] = dfs[k][i][dfs[k][i]["Unidad"]=='Cantidad de hogares'] #Cantidad de personas
+#                     dfs[k][i].drop(columns=["Unidad"], inplace=True)
+#                 column_name = dfs[k][i].columns[-2]  # Get the second-to-last column name
+#                 column_filters = list(dfs[k][i].columns[[r not in [column_name, "Total"] for r in list(dfs[k][i].columns)]])
+#                 if not all([col in ['Municipios', 'Edad', 'Sexo',
+#                     'Nivel de ingresos mensuales netos del hogar', 'Nacionalidad de los miembros del hogar',
+#                     'Superficie útil de la vivienda', 'Tipo de edificio', 'Año de construcción del edificio',
+#                     'Número de miembros del hogar'] for col in column_filters]):
+#                     continue
+#                 if column_name not in variables_meta:
+#                     variables_meta[column_name] = {}
+#                 if column_name not in classes_variables:
+#                     classes_variables[column_name] = list(dfs[k][i][column_name].unique())
+#                 for colf in column_filters:
+#                     filtering_variables[colf] = list(dfs[k][i][colf].unique())
+#                     filtering_variables[colf] = list(dfs[k][i][colf].unique())
+#                 if "FilteringVariables" in variables_meta[column_name]:
+#                     variables_meta[column_name]["FilteringVariables"].append(column_filters)
+#                 else:
+#                     variables_meta[column_name]["FilteringVariables"] = [column_filters]
+#                 if "ElementDfs" in variables_meta[column_name]:
+#                     variables_meta[column_name]["ElementDfs"].append((k,i))
+#                 else:
+#                     variables_meta[column_name]["ElementDfs"] = [(k,i)]
+#                 if "Total" in variables_meta[column_name]:
+#                     variables_meta[column_name]["Total"].append(dfs[k][i].columns[-1])
+#                 else:
+#                     variables_meta[column_name]["Total"] = [dfs[k][i].columns[-1]]
+#
+#         atlas_df = INERentalDistributionAtlas(wd=wd)['Sections']
+#         atlas_df = atlas_df[atlas_df.Year==2021]
+#         population_df = INEPopulationAnualCensus(wd=wd)['Sections']
+#         population_df = population_df[population_df.Year==2021]
+#         atlas_df["section_code"] = atlas_df["Municipality code"] + atlas_df["District code"] + atlas_df["Section code"]
+#         atlas_df.drop(columns=["Municipality code", "District code", "Section code"], inplace=True)
+#         population_df["section_code"] = population_df["Municipality code"] + population_df["District code"] + population_df["Section code"]
+#         population_df.drop(columns=["Municipality code", "District code", "Section code"], inplace=True)
+#         social_df = atlas_df.merge(population_df, on="section_code", how="left")
+#
+#         # Recalculate the net salaries and
+#         social_df["Menores de 14 años por hogar"] = social_df["Tamaño medio del hogar"] / social_df['Population_y'] * (
+#             social_df['Population ~ Age:10-14'] + social_df['Population ~ Age:5-9'] + social_df['Population ~ Age:0-4'])
+#         social_df["Mayores de 15 años por hogar"] = social_df["Tamaño medio del hogar"] - social_df["Menores de 14 años por hogar"]
+#         social_df["Unidades de consumo medio en el hogar"] = (
+#             (social_df["Mayores de 15 años por hogar"]).clip(upper=1) +
+#             (social_df["Mayores de 15 años por hogar"]-1).clip(lower=0)*0.5 +
+#             social_df["Menores de 14 años por hogar"]*0.3)
+#
+#         social_df = pd.concat([social_df, social_df.apply(estimate_income_distribution, axis=1)], axis=1)
+#         social_df = pd.concat([social_df, social_df.apply(estimate_nationality_households, axis=1)], axis=1)
+#         hypercadaster_df = pd.read_pickle(hypercadaster_ES_input_pkl_file, compression="gzip")
+#         exogenous_df = hypercadaster_df.merge(social_df, on="section_code")
+#
+#         social_filters = {
+#             'Edad': {
+#                 'Menos de 30 años': ((exogenous_df['Population ~ Age:0-4'] + exogenous_df['Population ~ Age:5-9'] +
+#                                       exogenous_df['Population ~ Age:10-14'] + exogenous_df['Population ~ Age:15-19'] +
+#                                       exogenous_df['Population ~ Age:20-24'] + exogenous_df['Population ~ Age:25-29']) * 100 /
+#                                      exogenous_df["Population_y"]),
+#                 'De 30 a 39 años': (exogenous_df['Population ~ Age:30-34'] + exogenous_df['Population ~ Age:35-39']) /
+#                                    exogenous_df["Population_y"],
+#                 'De 40 a 49 años': (exogenous_df['Population ~ Age:40-44'] + exogenous_df['Population ~ Age:45-49']) /
+#                                    exogenous_df["Population_y"],
+#                 'De 50 a 59 años': (exogenous_df['Population ~ Age:50-54'] + exogenous_df['Population ~ Age:55-59']) /
+#                                    exogenous_df["Population_y"],
+#                 'De 60 a 69 años': (exogenous_df['Population ~ Age:60-64'] + exogenous_df['Population ~ Age:65-69']) /
+#                                    exogenous_df["Population_y"],
+#                 'De 70 y más años': ((exogenous_df['Population ~ Age:70-74'] + exogenous_df['Population ~ Age:75-79'] +
+#                                       exogenous_df['Population ~ Age:80-84'] + exogenous_df['Population ~ Age:85-89'] +
+#                                       exogenous_df['Population ~ Age:90-94'] + exogenous_df['Population ~ Age:95-99'] +
+#                                       exogenous_df['Population ~ Age:>99']) * 100 /
+#                                      exogenous_df["Population_y"]),
+#             },
+#             'Sexo': {
+#                 'Hombre': exogenous_df['Population ~ Sex:Males'] / exogenous_df["Population_y"],
+#                 'Mujer': exogenous_df['Population ~ Sex:Females'] / exogenous_df["Population_y"]
+#             },
+#             'Nivel de ingresos mensuales netos del hogar': {
+#                 'Menos de 1.000 euros': exogenous_df["Salario mensual neto del hogar de menos de 1.000 euros"],
+#                 'De 1.000 euros a menos de 1.500 euros': exogenous_df[
+#                     'Salario mensual neto del hogar de 1.000 euros a menos de 1.500 euros'],
+#                 'De 1.500 euros a menos de 2.000 euros': exogenous_df[
+#                     'Salario mensual neto del hogar de 1.500 euros a menos de 2.000 euros'],
+#                 'De 2.000 euros a menos de 3.000 euros': exogenous_df[
+#                     'Salario mensual neto del hogar de 2.000 euros a menos de 3.000 euros'],
+#                 '3.000 euros o más': exogenous_df['Salario mensual neto del hogar de 3.000 euros o más']
+#             },
+#             'Nacionalidad de los miembros del hogar': {
+#                 'Hogar exclusivamente español': exogenous_df["Hogar exclusivamente español"],
+#                 'Hogar mixto (con españoles y extranjeros)': exogenous_df["Hogar mixto (con españoles y extranjeros)"],
+#                 'Hogar exclusivamente extranjero': exogenous_df["Hogar exclusivamente extranjero"]
+#             }
+#         }
+#         cadastral_filters = {
+#             'Superficie útil de la vivienda': {
+#                 'Hasta 75 m2': np.where(exogenous_df["br__mean_building_space_area_without_communals"].apply(extract_residential) < 76,1,0),
+#                 'Entre 76 y 90 m2': np.where((exogenous_df["br__mean_building_space_area_without_communals"].apply(extract_residential) >= 76) &
+#                                              (exogenous_df["br__mean_building_space_area_without_communals"].apply(extract_residential) < 91),1,0),
+#                 'Entre 91 y 120 m2': np.where((exogenous_df["br__mean_building_space_area_without_communals"].apply(extract_residential) >= 91) &
+#                                               (exogenous_df["br__mean_building_space_area_without_communals"].apply(extract_residential) < 121),1,0),
+#                 'Más de 120 m2': np.where(exogenous_df["br__mean_building_space_area_without_communals"].apply(extract_residential) >= 121,1,0)
+#             },
+#             'Tipo de edificio': {
+#                 'Vivienda unifamiliar (chalet, adosado, pareado...)': ,
+#                 'Edificio de 2 o más viviendas':
+#             },
+#             'Año de construcción del edificio': {
+#                 '2000 y anterior':,
+#                 'Posterior a 2000':
+#             },
+#             'Número de miembros del hogar': ['1 persona':,
+#                                              '2 personas':,
+#                                              '3 personas':,
+#                                              '4 personas o más':],
+#         }
+#
+#         total_element_of_variables = {
+#             'Lugar de trabajo/estudio': 'Total',
+#             'Número de desplazamaientos': 'Total',
+#             'Medio de transporte': 'Total',
+#             'Tipo de vehículo': 'Total',
+#             'Tiempo diario': 'Total',
+#             'Grado de satisfacción': 'Total',
+#             'Grado de participación en las tareas domésticas': 'Total',
+#             'Grado de participación en cuidados a menores o dependientes dentro del hogar': 'Total',
+#             'Tipo de dependiente': 'Total',
+#             'Horas diarias dedicadas al cuidado': 'Total',
+#             'Grado de participación en cuidados a menores o dependientes fuera del hogar': 'Total',
+#             'Tiene apoyo social': 'Total',
+#             'Tipo de relación': 'Total',
+#             'Lugar de residencia': 'Total',
+#             'Lugar de nacimiento progenitores': 'Total',
+#             'Residencia progenitores': 'Total',
+#             'Nacionalidad progenitores': 'Total',
+#             'Nivel estudios progenitores': 'Total',
+#             'Accede habitualmente a internet': 'Total',
+#             'Dispone de perfil en alguna red social': 'Total',
+#             'Dispone de smartphone': 'Total',
+#             'Realiza compras por internet': 'Total',
+#             'Realiza ventas por internet': 'Total',
+#             'Language': None,
+#             'Número de hijos': 'Total',
+#             'Edad': 'Total',
+#             'Nacionalidad': 'Total',
+#             'Estado civil': 'Total',
+#             'Nivel educativo': 'Total',
+#             'Situación laboral': 'Total',
+#             'Nivel de ingresos mensuales netos del hogar': 'Total',
+#             'Sexo de la pareja': 'Total',
+#             'Nacionalidad de la pareja': 'Total',
+#             'Número de habitaciones de la vivienda': 'Total',
+#             'Superficie útil de la vivienda': 'Total',
+#             'Tipo de edificio': 'Total',
+#             'Régimen de tenencia de la vivienda': 'Total',
+#             'Cuota mensual del alquiler': 'Total',
+#             'Cuota mensual de la hipoteca': 'Total',
+#             'Disponen de segunda residencia': 'Total',
+#             'Lugar de la segunda residencia': 'Total',
+#             'Días de uso de la segunda residencia al año': 'Total',
+#             'Número de vehículos': 'Total',
+#             'Vehículo ecólogico': 'Total',
+#             'Separan algún tipo de residuo': 'Total',
+#             'Tipo de residuos separados': 'Total (valores absolutos)',
+#             'Servicio doméstico remunerado': 'Total',
+#             'Ayuda externa': 'Total',
+#             'Adaptada a necesidades propias del envejecimiento': 'Total',
+#             'Problema de aislamiento': 'Total',
+#             'Tipo de calefacción': 'Total',
+#             'Tipo de combustible': 'Total',
+#             'Sistema de suministro de agua': 'Total',
+#             'Tiene sistema de refrigeración': 'Total',
+#             'Tipo de conexión a internet': 'Total',
+#             'Tipo de electrodoméstico': 'Total (valores absolutos)',
+#             'Tipo de bombillas': 'Total (valores absolutos)',
+#             'Aseo con inodoro / Bañera o ducha': 'Total (valores absolutos)',
+#             'Número de cuartos de baño o aseos': 'Total',
+#             'Cocina independiente de 4 m2 o más': 'Total',
+#             'Número de habitaciones': 'Total',
+#             'Tipo de problemática en la zona': 'Total (valores absolutos)',
+#             'Tipo de infraestructura o servicio': 'Total (valores absolutos)',
+#             'Estado de conservación': 'Total',
+#             'Accesibilidad': 'Total',
+#             'Tipo de instalación': 'Total (valores absolutos)',
+#             'Número de plazas de garaje': 'Total',
+#             'Tipo de dispositivo de energía renovable': 'Total'}
+#         total_element_of_filtering_variables = {
+#             'Edad': 'Total',
+#             'Sexo': 'Ambos Sexos',
+#             'Tipo de núcleo familiar': 'Total',
+#             'Tipo de unión': 'Total',
+#             'Nivel educativo alcanzado de la pareja': 'Total',
+#             'Situación laboral de la pareja': 'Total',
+#             'Nivel de ingresos mensuales netos del hogar': 'Total',
+#             'Sexo del progenitor': 'Ambos Sexos',
+#             'Estado civil del progenitor': 'Total',
+#             'Nivel educativo del progenitor': 'Total',
+#             'Situación laboral del progenitor': 'Total',
+#             'Tipo de hogar': 'Total',
+#             'Número de miembros del hogar': 'Total',
+#             'Nivel de estudios alcanzado por los miembros del hogar': 'Total',
+#             'Situación laboral de los miembros del hogar': 'Total',
+#             'Tipo de edificio': 'Total',
+#             'Año de construcción del edificio': 'Total',
+#             'Nacionalidad de los miembros del hogar': 'Total',
+#             'Superficie útil de la vivienda': 'Total'
+#         }
+#         selected_variables = ['Accede habitualmente a internet', 'Dispone de perfil en alguna red social',
+#                               'Dispone de smartphone', 'Realiza compras por internet', 'Realiza ventas por internet',
+#                               'Régimen de tenencia de la vivienda',
+#                               'Cuota mensual del alquiler', 'Cuota mensual de la hipoteca',
+#                               'Disponen de segunda residencia', 'Lugar de la segunda residencia',
+#                               'Días de uso de la segunda residencia al año',
+#                               'Adaptada a necesidades propias del envejecimiento',
+#                               'Problema de aislamiento', 'Tipo de calefacción', 'Tipo de combustible',
+#                               'Sistema de suministro de agua', 'Tiene sistema de refrigeración',
+#                               'Tipo de conexión a internet', 'Tipo de electrodoméstico', 'Tipo de bombillas',
+#                               'Aseo con inodoro / Bañera o ducha', 'Número de cuartos de baño o aseos',
+#                               'Cocina independiente de 4 m2 o más', 'Número de habitaciones',
+#                               'Tipo de problemática en la zona', 'Tipo de infraestructura o servicio',
+#                               'Estado de conservación', 'Accesibilidad', 'Tipo de instalación',
+#                               'Número de plazas de garaje', 'Tipo de dispositivo de energía renovable']
+#         variable = 'Régimen de tenencia de la vivienda'
+#         for variable in selected_variables:
+#             variable_meta = variables_meta[variable]
+#
+#             for i, (gr, elem) in enumerate(variable_meta["ElementDfs"]):
+#                 # break
+#                 filt_vars = variable_meta["FilteringVariables"][i]
+#                 df_ = dfs[gr][elem]
+#                 df_[variable_meta["Total"][0]] = df_[variable_meta["Total"][i]].astype(str).str.replace(".","").astype("float")
+#                 df_ = df_[df_[variable] != total_element_of_variables[variable]]
+#                 totals_by_group = df_.groupby(filt_vars)[variable_meta["Total"][i]].transform("sum")
+#                 df_["Proportion"] = df_[variable_meta["Total"][i]] * 100 / totals_by_group
+#
+#                 filt_vars_ = [v for v in filt_vars if "Municipios" not in v]
+#                 mask = pd.DataFrame(
+#                     {col: df_[col] == total_element_of_filtering_variables[col] for col in filt_vars_}
+#                 )
+#                 df_filtered = df_[~mask.all(axis=1)]
+#
+#
+#
+#         results = {
+#             "dfs": dfs,
+#             "variables_meta": variables_meta,
+#             "classes_variables": classes_variables,
+#             "filtering_variables": filtering_variables,
+#             "total_element_of_filtering_variables": total_element_of_filtering_variables,
+#             "total_element_of_variables": total_element_of_variables
+#         }
+#         with open(filename, "wb") as f:
+#             pickle.dump(results, f)
+#     else:
+#         with open(filename, "rb") as f:
+#             results = pickle.load(f)
+#     return results
+
+
+def extract_residential(value):
+    if pd.isna(value):
+        return np.nan
+    try:
+        # Convert string dict to actual dict if needed
+        if isinstance(value, str):
+            d = ast.literal_eval(value)
+        elif isinstance(value, dict):
+            d = value
+        else:
+            return np.nan
+        return d.get('Residential', np.nan)
+    except Exception:
+        return np.nan
+
 
 def INEMunicipalityNamesToMunicipalityCodes():
 
@@ -677,7 +1002,10 @@ def INEMunicipalityNamesToMunicipalityCodes():
     return df
 
 
-def INEAggregatedElectricityConsumption(path,municipality_code = None, years=None):
+def INEAggregatedElectricityConsumption(wd, municipality_code=None, years=None):
+
+    path = "INE/AggregatedElectricityConsumption"
+    path = path_creator(path, wd)
     filename = f"{path}/df.tsv"
 
     if not os.path.exists(filename):
@@ -701,7 +1029,7 @@ def INEAggregatedElectricityConsumption(path,municipality_code = None, years=Non
             g_df = g_df[(g_df["Municipality code"] == municipality_code).values]
         elif type(municipality_code) == list:
             g_df = g_df[g_df["Municipality code"].isin(municipality_code)]
-            
+
     if years != None:
         g_df = g_df[g_df['Year'].isin(years)]
     # municipality = g_df[-pd.isna(g_df["Municipality code"]) & pd.isna(g_df["District code"])]
@@ -711,10 +1039,13 @@ def INEAggregatedElectricityConsumption(path,municipality_code = None, years=Non
 
     return ({
         "Districts": districts
-    }) 
+    })
 
-def INECensus2021(path,municipality_code = None, years=None):
-    DATA_CENSO2021 = "https://www.ine.es/censos2021/C2021_Indicadores.csv"
+def INECensus2021(wd, municipality_code=None, years=None):
+
+    path = "INE/Census2021"
+    path = path_creator(path, wd)
+    filename = f"{path}/df.tsv"
 
     censo_ingestion_urls = {
         'Tamaño del hogar': {
@@ -782,7 +1113,7 @@ def INECensus2021(path,municipality_code = None, years=None):
             'columns': {
                 'aggregate':{'Percentage of people born abroad': lambda df: 1 - (df['España'] / df['TOTAL'])}
             },
-            
+
         },
         'Nivel de estudios (grado)': {
             'url': 'https://www.ine.es/jaxi/files/tpx/en/csv_bdsc/55249.csv?nocab=1',
@@ -792,15 +1123,13 @@ def INECensus2021(path,municipality_code = None, years=None):
                 'aggregate':{'Percentage of people with higher education (esreal_cneda=08 09 10 11 12) on population aged 16 and over': lambda df: df['Educación Superior']/(df['TOTAL'] - df['No aplicable (menor de 15 años)'])}
             },
 
-        } 
+        }
     }
-    filename = f"{path}/df.tsv"
-
 
     if not os.path.exists(filename):
         print("Downloading Censo 2021..")
         # Downloading Censo 2021
-        g_df = fetch_data(DATA_CENSO2021,separation=",",type=str)
+        g_df = fetch_data("https://www.ine.es/censos2021/C2021_Indicadores.csv" ,separation=",", type=str)
         g_df['cmun'] = g_df['cpro'] + g_df['cmun']
         column_names = {'cmun':'Municipality code','dist':'District code', 'secc': 'Section code', 't1_1': 'Total People', 't2_1': 'Percentage of women', 't2_2': 'Percentage of men', 't3_1': 'Average age', 't4_1': 'Percentage of people under 16 years', 't4_2': 'Percentage of people between 16 (inclusive) and 64 (inclusive) years', 't4_3': 'Percentage of people over 64 years of age', 't5_1': 'Percentage foreigners', 't6_1': 'Percentage of people born abroad', 't7_1': 'Percentage of people pursuing higher education (escur =08 09 10 11 12 ) of the population aged 16 and over', 't8_1': 'Percentage of people pursuing university studies ( escur = 09 10 11 12) on population aged 16 and over', 't9_1': 'Percentage of people with higher education (esreal_cneda=08 09 10 11 12) on population aged 16 and over', 't10_1': 'Percentage of population unemployment over active population= Unemployed /Active', 't11_1': 'Percentage of employed population over population aged 16 and over =Employed/ Population 16 and +', 't12_1': 'Percentage of active population over population aged 16 and over= Active / Population 16 and +', 't13_1': 'Percentage of disability pensioner population over population aged 16 and over = Disability pensioners / Population 16 and +', 't14_1': 'Percentage of retirement pensioner population over population 16 and over=Retirement pensioners / Population 16 and +', 't15_1': 'Percentage of population in another situation of inactivity over population 16 and over=Population in another situation of inactivity / Population 16 and +', 't16_1' : 'Percentage of student population over population 16 and over = Students / Population 16 and +', 't17_1': 'Percentage of people with single marital status', 't17_2': 'Percentage of people with married marital status', 't17_3': 'Percentage of people with marital status widowed', 't17_4': 'Percentage of people for whom their marital status is not stated', 't17_5': 'Percentage of people with marital status legally separated or divorced', 't18_1': 'Total Homes', 't19_1': 'Main Homes', 't19_2': 'Non-main Homes', 't20_1': 'Owned Homes', 't20_2': 'Rental Homes', 't20_3' : 'Homes in another type of tenure regime', 't21_1': 'Total Households', 't22_1': 'Households with 1 person', 't22_2': 'Households with 2 people', 't22_3': 'Households with 3 people', 't22_4': 'Households of 4 people', 't22_5': 'Households of 5 or more people'}
         g_df.rename(columns=column_names,inplace=True)
@@ -814,7 +1143,7 @@ def INECensus2021(path,municipality_code = None, years=None):
             data = data.pivot(index=['Municipality code'], columns=x, values='Total').reset_index()
             for op_code, operations in censo_ingestion_urls[x]['columns'].items():
                 operation_dict.get(op_code)(data,operations)
-            
+
         g_df['Year'] = '2021'
         g_df.to_csv(filename,sep="\t", index=False)
 
@@ -825,10 +1154,10 @@ def INECensus2021(path,municipality_code = None, years=None):
             g_df = g_df[(g_df["Municipality code"] == municipality_code).values]
         elif type(municipality_code) == list:
             g_df = g_df[g_df["Municipality code"].isin(municipality_code)]
-            
+
     if years != None:
         g_df = g_df[g_df['Year'].isin(years)]
-        
+
     g_df["Country code"] = "ES"
     g_df["Province code"] = g_df["Municipality code"].str[:2]
 
@@ -837,7 +1166,10 @@ def INECensus2021(path,municipality_code = None, years=None):
     })
 
 
-def INEHouseholdsRentalPriceIndex(path,municipality_code = None,  years=None):
+def INEHouseholdsRentalPriceIndex(wd, municipality_code=None, years=None):
+
+    path = "INE/HouseholdsRentalPriceIndex"
+    path = path_creator(path, wd)
     filename = f"{path}/df.tsv"
 
     if not os.path.exists(filename):
@@ -876,10 +1208,10 @@ def INEHouseholdsRentalPriceIndex(path,municipality_code = None,  years=None):
             df_ = df_[(df_["Municipality code"] == municipality_code).values]
         elif type(municipality_code) == list:
             df_ = df_[df_["Municipality code"].isin(municipality_code)]
-            
+
     if years != None:
         df_ = df_[df_['Year'].isin(years)]
-        
+
     df_["Country code"] = "ES"
     df_["Province code"] = df_["Municipality code"].str[:2]
 
@@ -894,10 +1226,12 @@ def INEHouseholdsRentalPriceIndex(path,municipality_code = None,  years=None):
     })
 
 
-def INEConsumerPriceIndex(path, municipality_code=None, years=None):
+def INEConsumerPriceIndex(wd, municipality_code=None, years=None):
 
+    path = "INE/ConsumerPriceIndex"
+    path = path_creator(path, wd)
     filename = f"{path}/df.tsv"
-    
+
     if not os.path.exists(filename):
         r = requests.get("https://www.ine.es/jaxiT3/files/t/es/csv_bd/23708.csv?nocab=1")
         r.encoding = 'utf-8'
