@@ -637,7 +637,7 @@ def estimate_nationality_households(row):
 
 def INEEssentialCharacteristicsOfPopulationAndHouseholds(
         wd, municipality_code=None,
-        hypercadaster_ES_input_pkl_file="/home/gmor/Nextcloud2/Beegroup/data/hypercadaster_ES/08900.pkl"):
+        hypercadaster_ES_input_pkl_file="/Users/gmor-air/Nextcloud/Beegroup/data/hypercadaster_ES/08900.pkl"):
     # Year 2021, more info:
     # https://www.ine.es/dyngs/INEbase/es/operacion.htm?c=Estadistica_C&cid=1254736177092&menu=resultados&idp=1254735572981
 
@@ -648,8 +648,8 @@ def INEEssentialCharacteristicsOfPopulationAndHouseholds(
     base_link = "https://www.ine.es/dynt3/inebase/en/index.htm"
     links_to_obtain_ids = {
         "People": {
-            # "Mobility": "?padre=8983&capsel=8987",
-            # "FamilyDynamics": "?padre=8988&capsel=8992",
+            "Mobility": "?padre=8983&capsel=8987",
+            "FamilyDynamics": "?padre=8988&capsel=8992",
             "SocialSupport": "?padre=8993&capsel=8997",
             "FamilyOrigin": "?padre=8998&capsel=9002",
             "ContactWithNewTechnologies": "?padre=9003&capsel=9007",
@@ -792,7 +792,18 @@ def INEEssentialCharacteristicsOfPopulationAndHouseholds(
                                       exogenous_df['Population ~ Age:10-14'] + exogenous_df['Population ~ Age:15-19'] +
                                       exogenous_df['Population ~ Age:20-24'] + exogenous_df['Population ~ Age:25-29']) /
                                      exogenous_df["Population_y"]),
+                'Menos de 40 años': ((exogenous_df['Population ~ Age:0-4'] + exogenous_df['Population ~ Age:5-9'] +
+                                      exogenous_df['Population ~ Age:10-14'] + exogenous_df['Population ~ Age:15-19'] +
+                                      exogenous_df['Population ~ Age:20-24'] + exogenous_df['Population ~ Age:25-29'] +
+                                      exogenous_df['Population ~ Age:30-34'] + exogenous_df['Population ~ Age:35-39']) /
+                                     exogenous_df["Population_y"]),
+                'De 30 a 49 años': (exogenous_df['Population ~ Age:30-34'] + exogenous_df['Population ~ Age:35-39'] +
+                                    exogenous_df['Population ~ Age:40-44'] + exogenous_df['Population ~ Age:45-49']) /
+                                   exogenous_df["Population_y"],
                 'De 30 a 39 años': (exogenous_df['Population ~ Age:30-34'] + exogenous_df['Population ~ Age:35-39']) /
+                                   exogenous_df["Population_y"],
+                'De 40 a 59 años': (exogenous_df['Population ~ Age:40-44'] + exogenous_df['Population ~ Age:45-49'] +
+                                    exogenous_df['Population ~ Age:50-54'] + exogenous_df['Population ~ Age:55-59']) /
                                    exogenous_df["Population_y"],
                 'De 40 a 49 años': (exogenous_df['Population ~ Age:40-44'] + exogenous_df['Population ~ Age:45-49']) /
                                    exogenous_df["Population_y"],
@@ -802,6 +813,19 @@ def INEEssentialCharacteristicsOfPopulationAndHouseholds(
                                    exogenous_df["Population_y"],
                 'De 70 a 79 años': (exogenous_df['Population ~ Age:70-74'] + exogenous_df['Population ~ Age:75-79']) /
                                    exogenous_df["Population_y"],
+                'De 50 y más años': ((exogenous_df['Population ~ Age:50-54'] + exogenous_df['Population ~ Age:55-59'] +
+                                      exogenous_df['Population ~ Age:60-64'] + exogenous_df['Population ~ Age:65-69'] +
+                                      exogenous_df['Population ~ Age:70-74'] + exogenous_df['Population ~ Age:75-79'] +
+                                      exogenous_df['Population ~ Age:80-84'] + exogenous_df['Population ~ Age:85-89'] +
+                                      exogenous_df['Population ~ Age:90-94'] + exogenous_df['Population ~ Age:95-99'] +
+                                      exogenous_df['Population ~ Age:>99']) /
+                                     exogenous_df["Population_y"]),
+                'De 60 y más años': ((exogenous_df['Population ~ Age:60-64'] + exogenous_df['Population ~ Age:65-69'] +
+                                      exogenous_df['Population ~ Age:70-74'] + exogenous_df['Population ~ Age:75-79'] +
+                                      exogenous_df['Population ~ Age:80-84'] + exogenous_df['Population ~ Age:85-89'] +
+                                      exogenous_df['Population ~ Age:90-94'] + exogenous_df['Population ~ Age:95-99'] +
+                                      exogenous_df['Population ~ Age:>99']) /
+                                     exogenous_df["Population_y"]),
                 'De 70 y más años': ((exogenous_df['Population ~ Age:70-74'] + exogenous_df['Population ~ Age:75-79'] +
                                       exogenous_df['Population ~ Age:80-84'] + exogenous_df['Population ~ Age:85-89'] +
                                       exogenous_df['Population ~ Age:90-94'] + exogenous_df['Population ~ Age:95-99'] +
@@ -817,6 +841,9 @@ def INEEssentialCharacteristicsOfPopulationAndHouseholds(
                 'Mujer': exogenous_df['Population ~ Sex:Females'] / exogenous_df["Population_y"]
             },
             'Nivel de ingresos mensuales netos del hogar': {
+                'Menos de 500 euros': exogenous_df["Salario mensual neto del hogar de menos de 500 euros"] / 100,
+                'De 500 euros a menos de 1.000 euros': exogenous_df[
+                    'Salario mensual neto del hogar de 500 euros a menos de 1.000 euros'] / 100,
                 'Menos de 1.000 euros': exogenous_df["Salario mensual neto del hogar de menos de 1.000 euros"] / 100,
                 'De 1.000 euros a menos de 1.500 euros': exogenous_df[
                     'Salario mensual neto del hogar de 1.000 euros a menos de 1.500 euros'] / 100,
@@ -824,7 +851,14 @@ def INEEssentialCharacteristicsOfPopulationAndHouseholds(
                     'Salario mensual neto del hogar de 1.500 euros a menos de 2.000 euros'] / 100,
                 'De 2.000 euros a menos de 3.000 euros': exogenous_df[
                     'Salario mensual neto del hogar de 2.000 euros a menos de 3.000 euros'] / 100,
-                '3.000 euros o más': exogenous_df['Salario mensual neto del hogar de 3.000 euros o más'] / 100
+                'De 2.000 euros a menos de 2.500 euros': exogenous_df[
+                                                             'Salario mensual neto del hogar de 2.000 euros a menos de 2.500 euros'] / 100,
+                'De 2.500 euros a menos de 3.000 euros': exogenous_df[
+                                                             'Salario mensual neto del hogar de 2.500 euros a menos de 3.000 euros'] / 100,
+                '3.000 euros o más': exogenous_df['Salario mensual neto del hogar de 3.000 euros o más'] / 100,
+                'De 3.000 euros a menos de 5.000 euros': exogenous_df[
+                                                             'Salario mensual neto del hogar de 3.000 euros a menos de 5.000 euros'] / 100,
+                'De 5.000 euros o más': exogenous_df['Salario mensual neto del hogar de 5.000 euros o más'] / 100
             },
             'Nacionalidad de los miembros del hogar': {
                 'Hogar exclusivamente español': exogenous_df["Hogar exclusivamente español"] / 100,
@@ -861,7 +895,11 @@ def INEEssentialCharacteristicsOfPopulationAndHouseholds(
                                        (exogenous_df["number_of_people_in_households"] < 2.5), 1, 0),
                 '3 personas': np.where((exogenous_df["number_of_people_in_households"] >= 2.5) &
                                        (exogenous_df["number_of_people_in_households"] < 3.5), 1, 0),
-                '4 personas o más': np.where(exogenous_df["number_of_people_in_households"] >= 3.5, 1, 0)
+
+                '4 personas': np.where((exogenous_df["number_of_people_in_households"] >= 3.5) &
+                                       (exogenous_df["number_of_people_in_households"] < 4.5), 1, 0),
+                '4 personas o más': np.where(exogenous_df["number_of_people_in_households"] >= 3.5, 1, 0),
+                '5 personas o más': np.where(exogenous_df["number_of_people_in_households"] >= 4.5, 1, 0)
             }
         }
 
@@ -967,11 +1005,10 @@ def INEEssentialCharacteristicsOfPopulationAndHouseholds(
             'Superficie útil de la vivienda': 'Total'
         }
 
-        variable = 'Régimen de tenencia de la vivienda'
-
         all_proportion_dfs = {}
         for variable in variables_meta.keys():
             variable_meta = variables_meta[variable]
+            all_proportion_dfs[variable] = []
             for i, (gr, elem) in enumerate(variable_meta["ElementDfs"]):
                 filt_vars = variable_meta["FilteringVariables"][i]
                 df_ = dfs[gr][elem]
@@ -981,17 +1018,18 @@ def INEEssentialCharacteristicsOfPopulationAndHouseholds(
                 df_["Proportion"] = df_[variable_meta["Total"][i]] * 100 / totals_by_group
 
                 filt_vars_ = [v for v in filt_vars if "Municipios" not in v]
-                mask = pd.DataFrame(
-                    {col: df_[col] == total_element_of_filtering_variables[col] for col in filt_vars_}
-                )
-                df_ = df_[~mask.any(axis=1)]
+                if len(filt_vars_) > 0:
+                    mask = pd.DataFrame(
+                        {col: df_[col] == total_element_of_filtering_variables[col] for col in filt_vars_}
+                    )
+                    df_ = df_[~mask.any(axis=1)]
 
-                for filt_var in filt_vars_:
-                    # One-hot encode the 'Número de miembros del hogar' column
-                    one_hot = pd.get_dummies(df_[filt_var], prefix=filt_var,dtype=int,prefix_sep=' ~ ')
-                    # Concatenate the one-hot columns back to the original dataframe
-                    df_.drop(columns=[filt_var], inplace=True)
-                    df_ = pd.concat([df_, one_hot], axis=1)
+                    for filt_var in filt_vars_:
+                        # One-hot encode the 'Número de miembros del hogar' column
+                        one_hot = pd.get_dummies(df_[filt_var], prefix=filt_var,dtype=int,prefix_sep=' ~ ')
+                        # Concatenate the one-hot columns back to the original dataframe
+                        df_.drop(columns=[filt_var], inplace=True)
+                        df_ = pd.concat([df_, one_hot], axis=1)
 
                 df_ = df_.drop(columns=["Total"])
 
@@ -1003,37 +1041,63 @@ def INEEssentialCharacteristicsOfPopulationAndHouseholds(
                 )
                 variable_and_subs = pivot_df.columns = [f"{variable} ~ {col}" for col in pivot_df.columns]
                 pivot_df = pivot_df.reset_index()
-
+                filt_vars_pivot = [i for i in pivot_df.columns if not i.startswith(variable)]
+                filt_vars__pivot = [i for i in pivot_df.columns if
+                    any([i.startswith(j) for j in filt_vars_])]
                 cases_df_ = cases_df[
                     [col for col in cases_df.columns if
                      any(col.startswith(f"{filt_var}") for filt_var in filt_vars)]
                 ]
-                cases_df_ = (cases_df_.reset_index().
-                                merge(pivot_df, on=list([i for i in cases_df_.columns if i in pivot_df.columns])).
-                                set_index("building_reference"))
-                all_proportion_dfs[variable] = cases_df_[variable_and_subs]
+                filt_vars__pivot = [i for i in filt_vars__pivot if i in cases_df_.columns]
+                cases_df_ = cases_df_[filt_vars_pivot]
 
+                # Loop over each target variable
+                for target in variable_and_subs:
+                    if len(filt_vars_)>0:
+                        results = []
+                        for municipio, group in pivot_df.groupby("Municipios"):
+                            # Filter predictor matrix A
+                            A = group[
+                                [col for col in group.columns if any(col.startswith(filt_var) for filt_var in filt_vars_)]]
 
+                            # Ensure it's square
+                            try:
+                                b = group[target]
+                                x, residuals, rank, s = np.linalg.lstsq(A.values, b.values, rcond=None)
+                                result_row = pd.Series(x, index=A.columns)
+                                result_row["Municipios"] = municipio
+                                results.append(result_row)
+                            except np.linalg.LinAlgError:
+                                print(f"Singular system for {municipio} with target {target}")
 
+                        cases_df_aux = (cases_df_.reset_index().
+                                        merge(pd.DataFrame(results), on="Municipios", how="left").
+                                        set_index("building_reference"))
+                        cases_df_aux = (
+                                cases_df_aux[[f"{i}_x" for i in filt_vars__pivot]].rename(
+                                    columns={f"{i}_x": i for i in filt_vars__pivot}
+                                ) *
+                                cases_df_aux[[f"{i}_y" for i in filt_vars__pivot]].rename(
+                                    columns={f"{i}_y": i for i in filt_vars__pivot}
+                                ))
+                        cases_df_[target] = cases_df_aux.sum(axis=1)
+                    else:
+                        cases_df_aux = (cases_df_.reset_index().
+                                        merge(pd.DataFrame(pivot_df[["Municipios", target]]), on="Municipios", how="left").
+                                        set_index("building_reference"))
+                        cases_df_[target] = cases_df_aux[target]
 
+                all_proportion_dfs[variable].append(cases_df_[variable_and_subs])
+            # Mean aggregation of all known cases per each variable
+            all_proportion_dfs[variable] = (
+                pd.DataFrame(np.nanmean(all_proportion_dfs[variable], axis=0),
+                          index=all_proportion_dfs[variable][0].index,
+                          columns=all_proportion_dfs[variable][0].columns))
+            # Normalization 0-100
+            all_proportion_dfs[variable] = (
+                all_proportion_dfs[variable] * 100 / all_proportion_dfs[variable].sum(axis=1))
 
-
-
-
-        results = {
-            "dfs": dfs,
-            "variables_meta": variables_meta,
-            "classes_variables": classes_variables,
-            "filtering_variables": filtering_variables,
-            "total_element_of_filtering_variables": total_element_of_filtering_variables,
-            "total_element_of_variables": total_element_of_variables
-        }
-        with open(filename, "wb") as f:
-            pickle.dump(results, f)
-    else:
-        with open(filename, "rb") as f:
-            results = pickle.load(f)
-    return results
+    return all_proportion_dfs
 
 
 def extract_residential(value):
