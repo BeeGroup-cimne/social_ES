@@ -10,7 +10,7 @@ AUTHOR_EMAIL = 'jmbrotovispe@gmail.com'
 URL = 'https://github.com/BeeGroup-cimne'
 
 LICENSE = 'MIT'
-DESCRIPTION = 'Python library to obtain the Spanish socioeconomic data joined with INE and OpenDataBCN sources.'
+DESCRIPTION = 'Python library to ingest and transform demographics, socioeconomical and other social-related datasets related with Spain from National Statistical Office and other sources.'
 LONG_DESCRIPTION = (HERE / "README.md").read_text(
     encoding='utf-8')
 LONG_DESC_TYPE = "text/markdown"

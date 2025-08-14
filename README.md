@@ -1,6 +1,6 @@
 # socioeconomic_ES
 
-This is a Python library to ingest the most updated Spanish socioeconomic data regarding [these](./social_ES/collections.yaml) domains.
+This is a Python library to ingest, clean and transform the most updated Spanish demographics, socioeconomic and other social-related datasets from multiple potential data source entities. At this moment, only INE (Spanish National Statistics Institute) is used.
 
 ## How to install the library?
 1. Download the repository in your own system: git clone
@@ -11,21 +11,16 @@ This is a Python library to ingest the most updated Spanish socioeconomic data r
 
 ## How to use it?
 ```python
-import social_ES.utils_INE as sc
+from social_ES import INE
+# Define a working data directory
 wd = "/home/gmor/Nextcloud2/Beegroup/data/social_ES"
-
-essential_characteristics = sc.INEEssentialCharacteristicsOfPopulationAndHouseholds(wd)
-population = sc.INEPopulationAnualCensus(wd)
-atlas = sc.INERentalDistributionAtlas(wd)
+# Fed the data using the functions
+atlas_df = INE.HouseholdIncomeDistributionAtlas(wd=wd)
 ```
-
-## For developers
-All the gathering functions should have the input parameters: `path`, `years` and `municipality codes`.
-
+In [this notebook](examples/get_ine.ipynb) you will find the examples and the output format of the results.
 
 ## Authors
 - Jose Manuel Broto - jmbroto@cimne.upc.edu
 - Gerard Mor - gmor@cimne.upc.edu
-- Míriam Méndez - miriam.mendez.serrano@estudiantat.upc.edu
 
-Copyright (c) 2024 Jose Manuel Broto, Gerard Mor, Míriam Méndez
+Copyright (c) 2025 Jose Manuel Broto, Gerard Mor
