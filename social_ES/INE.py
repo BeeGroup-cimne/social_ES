@@ -167,7 +167,7 @@ def HouseholdIncomeDistributionAtlas(wd, municipality_code=None, years=None):
                 df_ = pd.read_csv(StringIO(r.text), sep="\t", encoding="utf-8")
                 df_["Municipality name"] = df_["Municipalities"].astype(str).str[6:]
                 df_["Municipality code"] = df_["Municipalities"].astype(str).str[:5]
-                df_["District code"] = df_["Distritos"].astype(str).str[5:7]
+                df_["District code"] = df_["Districts"].astype(str).str[5:7]
                 df_["Section code"] = df_["Sections"].astype(str).str[7:10]
                 try:
                     time = "Periodo"
@@ -181,7 +181,7 @@ def HouseholdIncomeDistributionAtlas(wd, municipality_code=None, years=None):
                 df_["Value"] = pd.to_numeric(df_["Total"].astype(str).str.replace('.', '').str.replace(',', '.'), errors="coerce")
                 df_ = df_.sort_values(by='Value', na_position='last')
 
-                df_ = df_.drop(columns=["Municipalities","Distritos","Sections",time,"Total"])
+                df_ = df_.drop(columns=["Municipalities","Districts","Sections",time,"Total"])
                 df_ = df_.drop_duplicates([col for col in df_.columns if col not in 'Value'])
                 if "Nationality" in df_.columns:
                     df_["Nationality"] = df_["Nationality"].replace({"Extranjera":"Foreign"})
@@ -316,6 +316,7 @@ def EducationAndEmploymentCensus(wd, municipality_code=None, years=None, mode="r
                     "Sexo": "Sex",
                     "Total": "Value",
                     "Periodo": "Year",
+                    "Period": "Year",
                     "Nivel de formación alcanzado": "Educational level",
                     "País de nacimiento": "Birth origin",
                     "Relación con la actividad": "Labour force status"
@@ -514,6 +515,7 @@ def PopulationCensus(wd, municipality_code=None, years=None):
                 r = requests.get(url)
                 r.encoding = 'utf-8'
                 df_ = pd.read_csv(StringIO(r.text), sep="\t", encoding="utf-8", dtype={3:'str',6:'str'})
+                df_ = df_.rename(columns={"ï»¿Provincias": "Provincias"})
                 cols = df_.columns
                 if all([col in cols for col in ['Provincias', 'Municipios', 'Secciones']]):
                     df_['Municipios'] = df_['Municipios'].fillna(df_['Provincias'])
@@ -527,6 +529,7 @@ def PopulationCensus(wd, municipality_code=None, years=None):
                     "Lugar de nacimiento": "Birth origin",
                     "País de nacimiento": "Birth country",
                     "Nacionalidad": "Nationality",
+                    "País de nacionalidad": "Nationality",
                     "Relación entre lugar de nacimiento y lugar de residencia": "Birth origin in Spain",
                     "Total": "Value",
                     "Periodo": "Year",
@@ -909,7 +912,7 @@ def EssentialCharacteristicsOfPopulationAndHouseholds(
     if not all([os.path.exists(filename) for filename in filenames.values()]):
 
         print("Reading the metadata to gather the INE essential characteristics of population and households", file=sys.stdout)
-        mun_df = INEMunicipalityNamesToMunicipalityCodes()
+        mun_df = MunicipalityNamesToMunicipalityCodes()
         dfs = {}
         for related_to, sections_dict in links_to_obtain_ids.items():
             dfs[related_to] = []
@@ -1028,9 +1031,9 @@ def EssentialCharacteristicsOfPopulationAndHouseholds(
     social_df = atlas_df.merge(population_df, on="section_code", how="left")
 
     # Calculation of the consumption units per household
-    social_df["Menores de 14 años por hogar"] = social_df["Tamaño medio del hogar"] / social_df['Population_y'] * (
+    social_df["Menores de 14 años por hogar"] = social_df["Average size of the household"] / social_df['Population_y'] * (
         social_df['Population ~ Age:10-14'] + social_df['Population ~ Age:5-9'] + social_df['Population ~ Age:0-4'])
-    social_df["Mayores de 15 años por hogar"] = social_df["Tamaño medio del hogar"] - social_df["Menores de 14 años por hogar"]
+    social_df["Mayores de 15 años por hogar"] = social_df["Average size of the household"] - social_df["Menores de 14 años por hogar"]
     social_df["Unidades de consumo medio en el hogar"] = (
         (social_df["Mayores de 15 años por hogar"]).clip(upper=1) +
         (social_df["Mayores de 15 años por hogar"]-1).clip(lower=0)*0.5 +
