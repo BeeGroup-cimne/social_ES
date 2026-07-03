@@ -1,6 +1,6 @@
 from social_ES import INE
 
-wd = "/home/gmor/Nextcloud2/Beegroup/data/social_ES"
+wd = "/path/to/your/data"
 
 atlas_df = INE.HouseholdIncomeDistributionAtlas(wd=wd)
 population_df = INE.PopulationCensus(wd=wd)
