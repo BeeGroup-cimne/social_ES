@@ -867,7 +867,7 @@ def estimate_nationality_households(row):
     })
 
 def EssentialCharacteristicsOfPopulationAndHouseholds(
-        wd, hypercadaster_ES_input_pkl_file):
+        wd, hypercadaster_ES_input_pkl_file=None, hypercadaster_ES_input_gdf=None):
     # Year 2021, more info:
     # https://www.ine.es/dyngs/INEbase/es/operacion.htm?c=Estadistica_C&cid=1254736177092&menu=resultados&idp=1254735572981
 
@@ -1041,7 +1041,12 @@ def EssentialCharacteristicsOfPopulationAndHouseholds(
 
     social_df = pd.concat([social_df, social_df.apply(estimate_income_distribution, axis=1)], axis=1)
     social_df = pd.concat([social_df, social_df.apply(estimate_nationality_households, axis=1)], axis=1)
-    hypercadaster_df = pd.read_pickle(hypercadaster_ES_input_pkl_file, compression="gzip")
+
+    if hypercadaster_ES_input_gdf is not None:
+        hypercadaster_df = hypercadaster_ES_input_gdf
+    else:
+        hypercadaster_df = pd.read_pickle(hypercadaster_ES_input_pkl_file, compression="gzip")
+
     exogenous_df = hypercadaster_df.merge(social_df, on="section_code")
     residential_area_by_section_code = exogenous_df.groupby("section_code")[
         "br__area_without_communals"] \

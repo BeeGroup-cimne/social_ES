@@ -6,7 +6,7 @@ National Statistics Institute) is supported.
 
 [![Python Version](https://img.shields.io/badge/python-3.9+-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-EUPL%20v1.2-blue.svg)](https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12)
-[![Version](https://img.shields.io/badge/version-1.0.0-green.svg)](https://github.com/BeeGroup-cimne/social_ES)
+[![Version](https://img.shields.io/badge/version-1.0.1-green.svg)](https://github.com/BeeGroup-cimne/social_ES)
 
 ## 🎯 Overview
 
