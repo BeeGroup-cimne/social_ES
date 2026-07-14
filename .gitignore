@@ -4,4 +4,5 @@ __pycache__
 *.csv
 *.ipynb
 social_ES.egg-info
+build
 dist

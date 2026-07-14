@@ -34,23 +34,18 @@ instead of re-downloading from INE.
 
 ## 🚀 Installation
 
-1. Clone the repository:
+Install from PyPI:
+
+```bash
+pip install social_ES
+```
+
+Or, for development from source:
 
 ```bash
 git clone https://github.com/BeeGroup-cimne/social_ES.git
 cd social_ES
-```
-
-2. Build the package:
-
-```bash
-python setup.py sdist
-```
-
-3. Install it:
-
-```bash
-pip install dist/social_ES-1.0.0.tar.gz
+pip install .
 ```
 
 ## 📖 Quick Start

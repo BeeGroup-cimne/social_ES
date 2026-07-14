@@ -164,7 +164,7 @@ def HouseholdIncomeDistributionAtlas(wd, municipality_code=None, years=None):
             for url in urls:
                 r = requests.get(url)
                 r.encoding = 'utf-8'
-                df_ = pd.read_csv(StringIO(r.text), sep="\t", encoding="utf-8")
+                df_ = pd.read_csv(StringIO(r.text), sep="\t", encoding="utf-8", low_memory=False)
                 df_["Municipality name"] = df_["Municipalities"].astype(str).str[6:]
                 df_["Municipality code"] = df_["Municipalities"].astype(str).str[:5]
                 df_["District code"] = df_["Districts"].astype(str).str[5:7]
@@ -246,6 +246,11 @@ def HouseholdIncomeDistributionAtlas(wd, municipality_code=None, years=None):
         elif type(municipality_code) == list:
             g_df = g_df[g_df["Municipality code"].isin(municipality_code)]
 
+    # Defragment g_df before adding columns: it is built from repeated
+    # pd.concat calls in the download loop, which leaves it highly fragmented and
+    # would trigger a PerformanceWarning on each column insert below. .copy()
+    # rebuilds a single contiguous block.
+    g_df = g_df.copy()
     g_df["Country code"] = "ES"
     g_df["Province code"] = g_df["Municipality code"].str[:2]
 
@@ -730,12 +735,7 @@ def HouseholdsPriceIndex(wd, municipality_code=None, years=None):
         df_["Country code"] = "ES"
         df_["Autonomous Communities and Cities"] = df_["Autonomous Communities and Cities"].str[:2]
         df_["Year"] = df_["Periodo"].str[:4].astype(int)
-        df_["Quarter"] = df_["Periodo"].str[4:].replace({
-            "QI": 1,
-            "QII": 2,
-            "QIII": 3,
-            "QIV": 4
-        })
+        df_["Quarter"] = df_["Periodo"].str[4:].map({"QI": 1, "QII": 2, "QIII": 3, "QIV": 4})
         df_["Index type"] = df_["Index type"].replace({
             "General": "Whole housing market",
             "New dwelling": "First-hand housing market",
@@ -925,7 +925,7 @@ def EssentialCharacteristicsOfPopulationAndHouseholds(
                 for k,url in urls.items():
                     r = requests.get(url)
                     r.encoding = 'utf-8'
-                    df_ = pd.read_csv(StringIO(r.text), sep="\t", encoding="utf-8")
+                    df_ = pd.read_csv(StringIO(r.text), sep="\t", encoding="utf-8", low_memory=False)
                     df_ = df_.rename({"Municipalities": "Municipios", "ï»¿Municipios": "Municipios"}, axis="columns")
                     df_ = df_.merge(mun_df, left_on="Municipios", right_on="Municipality name")
                     df_["Municipios"] = df_["Municipality code"]
@@ -1612,7 +1612,7 @@ def HouseholdsRentalPriceIndex(wd, municipality_code=None, years=None):
     if not os.path.exists(filename):
         r = requests.get("https://www.ine.es/jaxiT3/files/t/es/csv_bd/59061.csv?nocab=1")
         r.encoding = 'utf-8'
-        df_ = pd.read_csv(StringIO(r.text), sep="\t", encoding="utf-8")
+        df_ = pd.read_csv(StringIO(r.text), sep="\t", encoding="utf-8", low_memory=False)
         df_ = df_[df_["Tipo de dato"]=="Índice"]
         df_ = df_.drop(columns=["Total Nacional", "Tipo de dato"])
         cols = df_.columns
@@ -1672,7 +1672,7 @@ def ConsumerPriceIndex(wd, years=None):
     if not os.path.exists(filename):
         r = requests.get("https://www.ine.es/jaxiT3/files/t/es/csv_bd/23708.csv?nocab=1")
         r.encoding = 'utf-8'
-        df_ = pd.read_csv(StringIO(r.text), sep="\t", encoding="utf-8")
+        df_ = pd.read_csv(StringIO(r.text), sep="\t", encoding="utf-8", low_memory=False)
         df_ = df_[df_["Tipo de dato"] == "Índice"]
 
         spanish_clases = list(df_["Clases"].unique())
