@@ -6,7 +6,7 @@ National Statistics Institute) is supported.
 
 [![Python Version](https://img.shields.io/badge/python-3.9+-blue.svg)](https://python.org)
 [![License](https://img.shields.io/badge/license-EUPL%20v1.2-blue.svg)](https://joinup.ec.europa.eu/collection/eupl/eupl-text-eupl-12)
-[![Version](https://img.shields.io/badge/version-1.0.1-green.svg)](https://github.com/BeeGroup-cimne/social_ES)
+[![Version](https://img.shields.io/badge/version-1.0.3-green.svg)](https://github.com/BeeGroup-cimne/social_ES)
 
 ## 🎯 Overview
 
@@ -102,6 +102,9 @@ weekly_by_tract = atlas["Census tracts"].query("Year == 2021").merge(
     time_use["WeeklySchedule"], on=["Autonomous community code", "Household income group"])
 ```
 
+**[Full documentation](docs/README.md)** — one page per function, with the levels it returns, its parameters and
+its columns.
+
 See [examples/get_ine.ipynb](examples/get_ine.ipynb) for a full worked example, including the output format of each
 function.
 
@@ -115,7 +118,7 @@ function.
 | `PopulationCensus(wd, municipality_code, years)`                                         | Population census counts                                                             | Census tract / district / municipality | `municipality_code`, `years`      |
 | `EducationAndEmploymentCensus(wd, municipality_code, years, mode)`                       | Education level and employment status                                                | Census tract / district / municipality | `mode="relative"\|"absolute"`     |
 | `DwellingsAndPopulationCensus(wd, municipality_code, years)`                             | Population and dwellings census 2021: population profile (sex, age, nationality, education, labour force status, marital status) and dwelling, tenure and household size counts | Census tract / district / municipality | `municipality_code`, `years` (fixed to 2021) |
-| `EmptyAndSecondaryDwellingsCensus(wd, municipality_code, years)`                          | Empty, secondary and non-main dwellings in the 2001, 2011 and 2021 censuses, as counts and as shares of the area's dwellings | Municipality / province / autonomous community | `municipality_code`, `years` (2001, 2011, 2021) |
+| `EmptyAndSecondaryDwellingsCensus(wd, municipality_code, years, predict)`                          | Empty, secondary and non-main dwellings in the 2001, 2011 and 2021 censuses, as counts and as shares of the area's dwellings | Municipality / province / autonomous community | `municipality_code`, `years` (2001, 2011, 2021) |
 | `HouseholdsPriceIndex(wd, municipality_code, years)`                                     | Housing price index (whole, new, and second-hand market)                             | Province (derived from autonomous community), quarterly | `municipality_code`, `years`      |
 | `HouseholdsRentalPriceIndex(wd, municipality_code, years)`                               | Housing rental price index                                                           | Municipality / district         | `municipality_code`, `years`      |
 | `AggregatedElectricityConsumption(wd, municipality_code, years)`                         | Aggregated electricity consumption percentiles (2021)                                | District (municipality code retained) | `municipality_code`, `years`      |
@@ -159,12 +162,32 @@ from whichever classification each census published:
 | `Secondary` | `Dwelling type:Secondary` (+ `Other non-main`, in 2001) | `Electricity use:Very low consumption` + `Sporadic use` |
 | `Empty` | `Dwelling type:Empty` | `Electricity use:Empty` |
 
-The three classes partition the total in every census, so their shares always add to 100. Two choices are worth
-spelling out. 2021's `Very low consumption` (up to 250 kWh, about a month of use) counts as **secondary**, not empty:
-a dwelling used a month a year is what the earlier censuses recorded as a second home, and reading `Sporadic use` alone
-would understate it. 2001's `Other non-main` residual counts as secondary too, which is what INE itself does in its
-published 2001–2011 comparison. A row takes all three classes from one classification or from none, so the series is
-never half-filled from one census and half from another.
+The three classes partition the total in every census, so their shares always add to 100, and they are returned as
+integer counts of dwellings. One choice is worth spelling out: 2021's `Very low consumption` (up to 250 kWh, about a
+month of use) counts as **secondary**, not empty — a dwelling used a month a year is what the earlier censuses recorded
+as a second home, and reading `Sporadic use` alone would understate it. A row takes all three classes from one
+classification or from none, so the series is never half-filled from one census and half from another.
+
+2001 is the only census that splits an "otro tipo" residual out of the non-main dwellings, and it is counted in
+`Dwelling type:Secondary` rather than returned on its own — which is what INE itself does in its published 2001–2011
+comparison (3,360,631 + 292,332 = 3,652,963). Keeping it apart would make the 2001 secondary count read lower than the
+later ones for no reason other than the questionnaire.
+
+**Filling the gaps INE leaves** (`predict=True`): the 2011 split is published only for municipalities over 2,000
+inhabitants and the 2021 electricity classification only for those over 1,000, so most municipalities carry `NaN`.
+What is missing is never the whole picture, though — the total each missing piece belongs to *is* published for the
+municipality (2011 gives every non-main count, 2021 every dwelling count), the province total of every missing column
+is published too, and the municipal counts of those totals add up to their province exactly in all 52 provinces. So a
+model only has to say how a known quantity divides, and gradient-boosted trees do that from what INE publishes
+everywhere: the dwelling counts of all three censuses, the 2001 split (the only one that exists for every
+municipality), and the 2021 census indicators describing the place. Each predicted share is then scaled until its
+province adds up to the published figure **exactly**, so summing the municipal table reproduces the regional one —
+which, with the gaps left as they come, it does not.
+
+Held out five ways, the shares are predicted at R² 0.72 (2011 secondary) and 0.76 (2021 empty), against 0.00 for
+giving every municipality the national rate. It is still an estimate: a municipality of forty dwellings is estimated
+no better than that. The `Predicted` column says of every row whether any of its figures were modelled, `MapVariable`
+turns it into a show/hide control on the map, and without `predict=True` nothing is filled in at all.
 
 > ⚠️ **This is a bridge, not an identity.** The 2021 numbers come from electricity meters, the earlier ones from a
 > census agent's judgement at the door, so any movement between 2011 and 2021 along these lines mixes a real change in
@@ -234,7 +257,7 @@ out: `pip install "social_ES[geo]"`.
 | `AdministrativeBoundaries(wd, year, level, municipality_code, province_code, autonomous_community_code)` | A `GeoDataFrame` of boundaries in WGS84, at any of the five levels |
 | `MapVariable(data, variable, wd, ...)`                                         | Writes an interactive HTML choropleth of a dataset — one variable, or every one of them behind a picker |
 | `BoundaryTiles(wd, year, level)`                                               | Builds and caches the PMTiles vector-tile archive of a level, for `MapVariable(tiles=True)` |
-| `ServeMaps(wd, port)`                                                          | Serves the written maps, and their tiles, over HTTP                                |
+| `ServeMaps(wd, port)`                                                          | Serves the written maps and their tile archives over HTTP, byte ranges included    |
 
 ```python
 from social_ES import INE
@@ -280,12 +303,39 @@ Balearics, and the Canaries) carrying the codes alone, whose names are filled in
 > data with no boundary in that year are reported and left off the map.
 
 **What the map is**: a single self-contained HTML file — the geometry is embedded, so nothing but the basemap tiles and
-Leaflet itself is fetched when it is opened. Hovering an area gives its name, code and value; several years become a
+MapLibre itself is fetched when it is opened. The areas are drawn as vectors on the GPU, so they stay sharp at any
+zoom and the zoom itself is continuous rather than a ladder of whole levels. Hovering an area gives its name, code and value; several years become a
 slider, with the classes computed over every year at once so the colours mean the same thing at each stop; and the
 values are also written out as a table, since a colour is not a readable number. The polygons use a single-hue blue
 ramp for a magnitude (`palette="sequential"`, the default), blue-to-red around a midpoint for a value read against a
 reference (`"diverging"`, with `center`), and a fixed categorical order for a non-numeric variable, which is detected
-and switched to automatically.
+and switched to automatically. `"greens"`, `"oranges"` and `"purples"` are the same ramp in another hue — the lightness
+steps are shared, so only the colour changes and never how far apart two classes look — and `"viridis"` runs the other
+way, dark to light, stopping short of its yellows, which are the part of it a light basemap swallows.
+
+A diverging map mirrors its classes around `center`, which defaults to the **median** of the values. Zero is the
+midpoint of a change or a difference, but of nothing that is only ever positive: centred on zero, a percentage spends
+half its classes below the smallest value there is, and the legend reads in negative numbers. Pass `center=0` for the
+variables whose midpoint really is zero. The mirror reaches only as far as the shorter side of the data allows, and the
+two outer classes carry whatever lies past it.
+
+**Opacity, borders and the tooltip** are page controls too. `opacity` sets how solid the areas are drawn (areas with no
+value stay fainter, at the same ratio); `borders` draws the white hairline between areas, and defaults to off on a
+tiled map, where every area is cut at the tile boundaries and outlining the pieces would draw the tile grid across the
+map; the tooltip that follows the pointer can be switched off from the legend.
+
+**Changing the map without rewriting the file**: the legend carries the classification itself — the palette, the number
+of classes, and whether they are cut at quantiles or at equal intervals — plus the opacity, the borders and the
+tooltip, and the page cuts the values again as those change. `palette`, `bins` and `classification` set where the controls start rather than settling the
+matter, so trying six classes instead of four, or linear instead of quantiles, costs a click rather than another call.
+Class boundaries passed in by hand (`classification=[0, 100, 1000]`) are offered as `Custom` and are what the map opens
+on; asking for any other cut replaces them. A non-numeric variable has no boundaries to move, so the controls are
+hidden for it.
+
+A table carrying a `Predicted` column — `EmptyAndSecondaryDwellingsCensus(predict=True)` — gets one more: a checkbox
+that drops the modelled areas from the map and from the table, so what INE actually published can be seen on its own.
+The tooltip says so on the area itself. The button in the map's top corner folds the panels away entirely, and
+`panels=False` opens the page with them already folded.
 
 **Size and detail**: past 200 KB the payload is gzipped and base64'd into the page, and unpacked in the browser with
 `DecompressionStream` (Chrome/Edge 80+, Firefox 113+, Safari 16.4+); below that it stays plain JSON, readable in an
@@ -302,8 +352,9 @@ exactly what INE published. The result is both finer and smaller than reading th
 | Autonomous communities, all variables, 3 years | 0.86 MB | 2.60 MB | 100 m → 4.4 m |
 | Spain municipalities, one variable | 9.29 MB | **4.95 MB** | 100 m → 77 m |
 
-The polygons are drawn on a canvas rather than as SVG paths, so a page of thousands of areas is a handful of DOM nodes
-instead of one element per area.
+The areas are one GPU layer rather than one element each, and the data reaches them as feature state — the class each
+area falls in — with the colours following from a paint expression. Changing the palette, the number of classes or the
+year rewrites that expression instead of restyling thousands of shapes, and never touches the geometry.
 
 ### Vector tiles, for the maps that don't fit
 
@@ -332,9 +383,10 @@ cartography it comes from and rebuilt only if deleted. Values stay in the page a
 code each tile feature carries, which is what lets one archive serve maps of different variables, years and datasets.
 
 > ⚠️ **A tiled map has to be served.** A page opened from a `file://` URL is not allowed to fetch anything, tiles
-> included — so `tiles=True` maps are opened through `ServeMaps` (or any server able to reach the tile route), not by
-> double-clicking. Maps without `tiles=True` stay self-contained files. `ServeMaps` reads tiles straight out of the
-> PMTiles archive, so the level stays the one cached file it was built as rather than tens of thousands of small ones.
+> included — so `tiles=True` maps are opened through `ServeMaps` (or any server that answers byte-range requests), not
+> by double-clicking. Maps without `tiles=True` stay self-contained files. The page reads the PMTiles archive in place,
+> asking for the ranges holding the header, the directory and the tiles it draws, so the level stays the one cached
+> file it was built as and nothing has to unpack it on the way out.
 
 | Level (2021, whole country) | Areas | Embedded page | Tiled page | Archive, built once |
 |---|---|---|---|---|

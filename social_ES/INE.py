@@ -110,6 +110,12 @@ operation_dict = {
 
 
 def RelationAutonomousCommunityAndProvince():
+    """The lookup between provinces and the autonomous community each belongs to.
+
+    Returns one row per province, with the code and name of both. It is what every
+    other function here uses to attach a community to province-coded data, and it is
+    static: nothing is downloaded and no working directory is needed.
+    """
     df = pd.DataFrame([
         ("01", "Andalucía","04","Almería"),
         ("01", "Andalucía", "11", "Cádiz"),
@@ -393,6 +399,29 @@ def HouseholdIncomeDistributionAtlas(wd, municipality_code=None, years=None):
     })
 
 def EducationAndEmploymentCensus(wd, municipality_code=None, years=None, mode="relative"):
+    """Educational attainment and labour force status, by census tract.
+
+    Returns a dict of the ``"Census tracts"``, ``"Districts"`` and ``"Municipality"``
+    DataFrames, one row per area and year. Attainment comes in four levels (primary or
+    below, lower secondary, upper secondary and post-secondary non-tertiary, tertiary);
+    labour force status covers employed, unemployed, recipients of a disability or
+    retirement pension, other inactive situations, and students. Both are crossed with
+    sex and with place of birth.
+
+    Parameters
+    ----------
+    wd : str
+        Working directory the downloaded data is cached under. The first call
+        downloads from INE, later ones read the local copy.
+    municipality_code : str or list of str, optional
+        Restrict the result to these municipality code(s).
+    years : list of int, optional
+        Restrict the result to these years.
+    mode : {"relative", "absolute"}, default "relative"
+        ``"relative"`` returns shares in percent (0-100), each of the population it
+        actually describes — attainment of those aged 16 and over, unemployment of the
+        active population, not of everybody. ``"absolute"`` returns head counts.
+    """
 
     path = "INE/EducationAndEmploymentCensus"
     path = path_creator(path, wd)
@@ -604,6 +633,26 @@ def EducationAndEmploymentCensus(wd, municipality_code=None, years=None, mode="r
 
 
 def PopulationCensus(wd, municipality_code=None, years=None):
+    """The annual population census, by census tract.
+
+    Returns a dict of the ``"Census tracts"``, ``"Districts"`` and ``"Municipality"``
+    DataFrames, one row per area and year, counting the registered population by sex,
+    five-year age band, nationality, country of birth, and where in Spain a person was
+    born — same municipality, same province, same autonomous community, or elsewhere.
+
+    Counts are of people registered as resident on 1 January of the reference year. INE
+    publishes the census tract table; the coarser two are aggregated from it.
+
+    Parameters
+    ----------
+    wd : str
+        Working directory the downloaded data is cached under. The first call
+        downloads from INE, later ones read the local copy.
+    municipality_code : str or list of str, optional
+        Restrict the result to these municipality code(s).
+    years : list of int, optional
+        Restrict the result to these years.
+    """
 
     path = "INE/PopulationCensus"
     path = path_creator(path, wd)
@@ -1101,7 +1150,8 @@ _DWELLING_USE_2011_REGIONAL_URL = ("https://www.ine.es/jaxi/files/_px/es/csv_bds
 _DWELLING_USE_2021_TYPE_URL = "https://www.ine.es/jaxi/files/tpx/es/csv_bdsc/59525.csv?nocab=1"
 _DWELLING_USE_2021_USE_URL = "https://www.ine.es/jaxi/files/tpx/es/csv_bdsc/59531.csv?nocab=1"
 
-# Counts returned, in reading order. "Dwellings" is the denominator of every share.
+# Counts read from INE and cached, in reading order. "Dwellings" is the denominator of
+# every share.
 _DWELLING_USE_COUNTS = [
     "Dwellings",
     "Dwellings ~ Dwelling type:Main",
@@ -1115,6 +1165,14 @@ _DWELLING_USE_COUNTS = [
     "Dwellings ~ Electricity use:Regular use",
 ]
 
+# 2001's residual class of non-main dwelling, folded into the secondary count on read
+# (see _dwelling_use_merge_other_non_main). It is cached as published, so the fold
+# follows the code rather than the cache, but it is not a column of the result.
+_DWELLING_USE_OTHER_NON_MAIN = "Dwellings ~ Dwelling type:Other non-main"
+
+_DWELLING_USE_RETURNED_COUNTS = [col for col in _DWELLING_USE_COUNTS
+                                 if col != _DWELLING_USE_OTHER_NON_MAIN]
+
 # The bridge between the two classifications, so that a single series can be read across
 # the three censuses. Each census fills these from whichever classification it publishes:
 #
@@ -1122,18 +1180,17 @@ _DWELLING_USE_COUNTS = [
 #   ----------------   ---------------------------------   ---------------------------
 #   Main               Dwelling type:Main                  Electricity use:Regular use
 #   Secondary          Dwelling type:Secondary             Electricity use:Very low
-#                      (+ Other non-main, in 2001)         consumption + Sporadic use
+#                                                          consumption + Sporadic use
 #   Empty              Dwelling type:Empty                 Electricity use:Empty
 #
-# Two things this alignment does, both deliberate:
+# One thing this alignment does, deliberately: 2021 "very low consumption" (up to 250
+# kWh, about a month of use) is counted as secondary rather than empty. It sits between
+# the two, and a dwelling used a month a year is what the earlier censuses would have
+# recorded as a second home, not as an unoccupied one. Read alone, "sporadic use" would
+# understate secondary dwellings.
 #
-# * 2021 "very low consumption" (up to 250 kWh, about a month of use) is counted as
-#   secondary rather than empty. It sits between the two, and a dwelling used a month a
-#   year is what the earlier censuses would have recorded as a second home, not as an
-#   unoccupied one. Read alone, "sporadic use" would understate secondary dwellings.
-# * 2001's "other type" of non-main dwelling is counted as secondary, which is what INE
-#   itself does when it publishes the 2001-2011 comparison: 3,360,631 + 292,332 =
-#   3,652,963, the secondary figure of its own series. 2011 has no such residual class.
+# 2001's "other type" residual needs no rule here: it is already part of
+# Dwelling type:Secondary by the time this runs (see _dwelling_use_merge_other_non_main).
 #
 # The three classes partition the total in every census, so the shares always add to 100.
 #
@@ -1156,9 +1213,7 @@ _DWELLING_USE_COMPARABLE = {
         "electricity": (["Dwellings ~ Electricity use:Regular use"], []),
     },
     "Dwellings ~ Comparable use:Secondary": {
-        # 2001 is the only census with an "other type" of non-main dwelling, so it is
-        # optional: its absence must not blank the 2011 secondary count.
-        "field": (["Dwellings ~ Dwelling type:Secondary"], ["Dwellings ~ Dwelling type:Other non-main"]),
+        "field": (["Dwellings ~ Dwelling type:Secondary"], []),
         "electricity": (["Dwellings ~ Electricity use:Very low consumption",
                          "Dwellings ~ Electricity use:Sporadic use"], []),
     },
@@ -1449,6 +1504,28 @@ def _dwelling_use_aggregate(df, group_columns):
     return df.groupby(group_columns, dropna=False)[counts].sum(min_count=1).reset_index()
 
 
+def _dwelling_use_merge_other_non_main(df):
+    """Fold 2001's ``Other non-main`` residual into its secondary dwelling count.
+
+    2001 is the only census that splits an "otro tipo" residual out of the non-main
+    dwellings; 2011 and 2021 have no such class. INE merges it into the secondary ones
+    when it publishes its own 2001-2011 comparison — 3,360,631 + 292,332 = 3,652,963,
+    the secondary figure of that series — and keeping it apart here would make 2001 read
+    lower than the later censuses for no reason other than the questionnaire.
+
+    The residual is added where a secondary count exists and dropped from the result, so
+    the three "Dwelling type" classes still add up to the non-main total.
+    """
+    if _DWELLING_USE_OTHER_NON_MAIN not in df.columns:
+        return df
+
+    secondary = "Dwellings ~ Dwelling type:Secondary"
+    # fillna(0) on the residual only: the censuses that never published it must keep
+    # their secondary count, and a row without a secondary count stays NaN.
+    df[secondary] = df[secondary] + df[_DWELLING_USE_OTHER_NON_MAIN].fillna(0)
+    return df.drop(columns=[_DWELLING_USE_OTHER_NON_MAIN])
+
+
 def _dwelling_use_comparable(df):
     """Add the ``Dwellings ~ Comparable use:*`` columns aligning the two classifications.
 
@@ -1476,17 +1553,35 @@ def _dwelling_use_comparable(df):
         complete = pd.concat(block.values(), axis=1).notna().all(axis=1)
         blocks[source] = {name: value.where(complete) for name, value in block.items()}
 
+    # Counts of dwellings, so they are returned as integers rather than as the floats the
+    # NaN-aware arithmetic above produces.
+    rounded = pd.DataFrame({name: blocks["electricity"][name].fillna(blocks["field"][name])
+                            for name in _DWELLING_USE_COMPARABLE}).round()
+
+    # The three classes partition the total, and rounding each of them on its own can
+    # leave them a dwelling short of it or a dwelling over — which they never were as
+    # published, and are once a modelled share has been turned into a count. The
+    # difference is given to the largest class, where one dwelling shows least.
+    complete = rounded.notna().all(axis=1) & df["Dwellings"].notna()
+    residual = (df["Dwellings"].round() - rounded.sum(axis=1)).where(complete, 0).fillna(0)
+    # Counts are never negative, so the filler only ever loses to a real class — and a
+    # row with no classes at all takes no residual anyway.
+    largest = rounded.fillna(-1.0).idxmax(axis=1)
+
     for name in _DWELLING_USE_COMPARABLE:
-        df[name] = blocks["electricity"][name].fillna(blocks["field"][name])
+        df[name] = (rounded[name] + residual.where(largest == name, 0)).astype("Int64")
     return df
 
 
 def _dwelling_use_shares(df):
     """Add the ``Percentage of dwellings ~ ...`` share of every count column."""
-    for col in _DWELLING_USE_COUNTS + _DWELLING_USE_COMPARABLE_COUNTS:
+    for col in _DWELLING_USE_RETURNED_COUNTS + _DWELLING_USE_COMPARABLE_COUNTS:
         if col == "Dwellings":
             continue
-        df[col.replace("Dwellings ~", "Percentage of dwellings ~", 1)] = df[col] / df["Dwellings"] * 100
+        share = df[col] / df["Dwellings"] * 100
+        # The comparable counts are nullable integers, which would carry a nullable
+        # float dtype through the division; every share is a plain float.
+        df[col.replace("Dwellings ~", "Percentage of dwellings ~", 1)] = share.astype(float)
     return df
 
 
@@ -1494,19 +1589,33 @@ def _dwelling_use_present(df, location_columns):
     """Derive the harmonised columns and the shares, and put the columns in a fixed order.
 
     Only the counts each census publishes are cached; everything derived from them is
-    rebuilt here, so a cache written before these columns existed still reads correctly.
+    rebuilt here, so a cache written by an earlier version still reads correctly.
     """
     # The caller passes a filtered slice, which the derived columns must not write through.
     df = df.copy()
+
+    # Earlier versions cached the derived columns alongside the counts. Whatever they
+    # hold is dropped instead of being passed through, so the result follows this code
+    # rather than the cache — including where a class has since been merged into another.
+    df = df.drop(columns=[col for col in df.columns
+                          if col.startswith("Percentage of dwellings ~")
+                          or col in _DWELLING_USE_COMPARABLE_COUNTS])
+
     for col in _DWELLING_USE_COUNTS + ["Median annual electricity consumption (kWh)"]:
         if col not in df.columns:
             df[col] = np.nan
 
+    # Before the comparable classes, which read the secondary count the fold produces.
+    df = _dwelling_use_merge_other_non_main(df)
     df = _dwelling_use_comparable(df)
     df = _dwelling_use_shares(df)
 
     share = lambda col: col.replace("Dwellings ~", "Percentage of dwellings ~", 1)
-    counts = _DWELLING_USE_COUNTS + _DWELLING_USE_COMPARABLE_COUNTS
+    counts = _DWELLING_USE_RETURNED_COUNTS + _DWELLING_USE_COMPARABLE_COUNTS
+    # Beside the area and the year it qualifies, rather than trailing the figures it
+    # is a statement about.
+    location_columns = location_columns + ([_DWELLING_USE_PREDICTED]
+                                           if _DWELLING_USE_PREDICTED in df.columns else [])
     order = (location_columns + counts +
              [share(col) for col in counts if col != "Dwellings"] +
              ["Median annual electricity consumption (kWh)"])
@@ -1547,7 +1656,230 @@ def _dwelling_use_regional_level(municipal, level):
                           ["Median annual electricity consumption (kWh)"]]].sort_values(location)
 
 
-def EmptyAndSecondaryDwellingsCensus(wd, municipality_code=None, years=None):
+# The municipal figures INE withholds, worked out from the ones it publishes.
+#
+# 2011 breaks the non-main dwellings into secondary and empty only for municipalities
+# over 2,000 inhabitants, and 2021 classifies dwellings by electricity use only for
+# those over 1,000. What is missing is never the whole picture, though, and that is what
+# makes it recoverable:
+#
+# * The total each missing piece belongs to is published for the municipality. 2011
+#   gives the non-main count everywhere, so what is unknown is how it splits, not how
+#   big it is; 2021 gives the dwelling count everywhere.
+# * The province total of every missing column is published too, and the municipal
+#   counts of the totals above add up to their province exactly — checked, all 52
+#   provinces, both years. So the modelled figures of a province are not free: they
+#   have to make up precisely the difference between its published total and the sum of
+#   its published municipalities.
+# * 2001 surveyed the split in every municipality in the country, so how a place split
+#   its non-main dwellings twenty years earlier is known even where 2011 is silent.
+#
+# A model therefore only has to distribute a known quantity among known containers,
+# which is a far smaller thing to ask of it than estimating the counts outright. The
+# shares it predicts are then scaled until the province total is met exactly, so the
+# published figures are never contradicted and summing the municipal table reproduces
+# the regional one — which, with the gaps left as they come, it does not.
+#
+# The result is still modelled, and the `Predicted` column says of every row whether any
+# of its figures are. Nothing here is returned unless `predict=True` asks for it.
+
+_DWELLING_USE_PREDICTED = "Predicted"
+
+# Bumped when the features or the model change, so that a prediction cached by an
+# earlier version is rebuilt rather than read back.
+_DWELLING_USE_PREDICT_VERSION = 1
+
+# What each census leaves out, what the missing pieces are a share of, and which one of
+# them is the remainder rather than a target: the classes partition their base, so the
+# last is what the others leave and modelling it too would only break the partition.
+_DWELLING_USE_PREDICT_PLAN = {
+    2011: {
+        "base": "Dwellings ~ Dwelling type:Non-main",
+        "targets": ["Dwellings ~ Dwelling type:Secondary"],
+        "remainder": "Dwellings ~ Dwelling type:Empty",
+    },
+    2021: {
+        "base": "Dwellings",
+        "targets": ["Dwellings ~ Electricity use:Empty",
+                    "Dwellings ~ Electricity use:Very low consumption",
+                    "Dwellings ~ Electricity use:Sporadic use"],
+        "remainder": "Dwellings ~ Electricity use:Regular use",
+    },
+}
+
+
+def _dwelling_use_features(wd, municipal):
+    """One row per municipality, holding everything the models predict from.
+
+    The dwelling counts of all three censuses — which INE publishes for every
+    municipality, unlike the split of them — the 2001 split itself, the only one that
+    exists everywhere, and the 2021 census indicators, which say what kind of place a
+    municipality is rather than how many dwellings are in it.
+    """
+    counted = ["Dwellings", "Dwellings ~ Dwelling type:Main", "Dwellings ~ Dwelling type:Non-main"]
+    wide = municipal.pivot_table(index="Municipality code", columns="Year", values=counted)
+    wide.columns = [f"{name} {year}" for name, year in wide.columns]
+
+    for year in (2001, 2011, 2021):
+        total, non_main = f"Dwellings {year}", f"Dwellings ~ Dwelling type:Non-main {year}"
+        if total in wide.columns and non_main in wide.columns:
+            wide[f"Non-main share {year}"] = wide[non_main] / wide[total].replace(0, np.nan)
+
+    if "Dwellings 2001" in wide.columns and "Dwellings 2021" in wide.columns:
+        wide["Dwelling growth 2001-2021"] = (wide["Dwellings 2021"] /
+                                             wide["Dwellings 2001"].replace(0, np.nan))
+
+    # 2001 is complete, so its split is a feature everywhere instead of a target.
+    early = municipal[municipal["Year"] == 2001].set_index("Municipality code")
+    base_2001 = early["Dwellings ~ Dwelling type:Non-main"].replace(0, np.nan)
+    for name in ("Secondary", "Empty"):
+        wide[f"{name} share of non-main 2001"] = (
+            early[f"Dwellings ~ Dwelling type:{name}"] / base_2001)
+
+    # What kind of place it is. Only the 2021 census describes municipalities this way,
+    # so 2011 borrows it: what these say — how old the population is, how much of the
+    # housing is rented, how big the households are — is the shape of a place, which
+    # moves over decades rather than between two censuses.
+    context = DwellingsAndPopulationCensus(wd=wd)["Municipality"]
+    numeric = [column for column in context.columns
+               if column not in ("Year",) and pd.api.types.is_numeric_dtype(context[column])]
+    context = context.set_index("Municipality code")[numeric]
+    context.columns = [f"2021 census: {column}" for column in context.columns]
+
+    features = wide.join(context, how="left")
+
+    # The learner refuses feature names holding any of `[`, `]` or `<`, which the age
+    # bands ("Age:<16") and nothing else here happen to use.
+    features.columns = [re.sub(r"[\[\]<>]", "_", column) for column in features.columns]
+    return features
+
+
+def _calibrate_shares(base, share, cap, total):
+    """Scale predicted shares until the counts they imply add up to `total`.
+
+    The province total is published and the municipalities that make it up are not, so
+    the model says how the difference is distributed and this says how much of it there
+    is. Scaling is monotone in the factor once the caps are applied, so the factor that
+    lands on the total exactly is found by halving the interval it lies in.
+
+    `cap` is the largest share each municipality can take — what is left of its base
+    after the classes already settled, so that the pieces never sum past the whole.
+    """
+    base = np.asarray(base, dtype=float)
+    share = np.clip(np.nan_to_num(np.asarray(share, dtype=float)), 0, None)
+    cap = np.clip(np.asarray(cap, dtype=float), 0, None)
+
+    ceiling = float(np.sum(cap * base))
+    if not np.isfinite(total) or total <= 0 or ceiling <= 0:
+        return np.zeros_like(share)
+    if total >= ceiling:
+        # Everything left over belongs to these classes; nothing else can absorb it.
+        return cap.copy()
+
+    def implied(factor):
+        return float(np.sum(np.minimum(share * factor, cap) * base))
+
+    low, high = 0.0, 1.0
+    while implied(high) < total and high < 1e12:
+        high *= 4
+    for _ in range(100):
+        middle = (low + high) / 2
+        if implied(middle) < total:
+            low = middle
+        else:
+            high = middle
+
+    return np.minimum(share * (low + high) / 2, cap)
+
+
+def _dwelling_use_predict(wd, municipal, provincial):
+    """Fill in the municipal counts INE does not publish, province total by province total.
+
+    Returns `municipal` with the gaps filled and a `Predicted` column saying which rows
+    were touched. Rows INE publishes in full are returned exactly as they came.
+    """
+    try:
+        from xgboost import XGBRegressor
+    except ImportError as error:
+        raise ImportError(
+            "Predicting the municipal figures INE withholds needs the `xgboost` package. "
+            "Install it with `pip install xgboost`, or call "
+            "EmptyAndSecondaryDwellingsCensus without `predict=True`."
+        ) from error
+
+    municipal = municipal.copy()
+    municipal[_DWELLING_USE_PREDICTED] = False
+
+    features = _dwelling_use_features(wd, municipal)
+    provinces = provincial.set_index(["Province code", "Year"])
+
+    for year, plan in _DWELLING_USE_PREDICT_PLAN.items():
+        rows = municipal["Year"] == year
+        if not rows.any():
+            continue
+
+        block = municipal.loc[rows].set_index("Municipality code")
+        base = block[plan["base"]]
+
+        # A municipality is missing its split, or it is not; the classes are published
+        # together or not at all, so one of them decides it for the rest.
+        missing = block[plan["targets"][0]].isna() & base.notna()
+        if not missing.any():
+            continue
+
+        known = ~missing & block[plan["targets"][0]].notna()
+        if known.sum() < 50:
+            print(f"Only {int(known.sum())} municipalities carry the {year} split, too few to "
+                  f"model the rest from; they are left as published.", file=sys.stdout)
+            continue
+
+        model_features = features.reindex(block.index)
+        safe_base = base.replace(0, np.nan)
+
+        # How much of its base each municipality has left to give, as the classes are
+        # settled one after another. The last class is the remainder, so what the
+        # targets do not take is what it gets.
+        room = pd.Series(1.0, index=block.index)
+        province = block[plan["base"]].index.str[:2]
+
+        for target in plan["targets"]:
+            observed = (block[target] / safe_base).clip(0, 1)
+
+            model = XGBRegressor(n_estimators=500, max_depth=5, learning_rate=0.05,
+                                 subsample=0.85, colsample_bytree=0.85, min_child_weight=5,
+                                 reg_lambda=1.0, objective="reg:squarederror",
+                                 random_state=0, n_jobs=4)
+            model.fit(model_features.loc[known], observed.loc[known])
+            predicted = pd.Series(model.predict(model_features.loc[missing]),
+                                  index=block.index[missing]).clip(0, 1)
+
+            # Scaled province by province onto what its published total leaves unspoken.
+            filled = pd.Series(np.nan, index=block.index)
+            for code in sorted(set(province[missing])):
+                here = missing & (province == code)
+                total = provinces[target].get((code, year), np.nan)
+                published = float(block.loc[known & (province == code), target].sum())
+                filled.loc[here] = _calibrate_shares(
+                    base.loc[here], predicted.reindex(block.index[here]),
+                    room.loc[here], max(0.0, float(total) - published)) * base.loc[here]
+
+            block.loc[missing, target] = filled.loc[missing]
+            room.loc[missing] = (room.loc[missing] -
+                                 (filled.loc[missing] / safe_base.loc[missing]).fillna(0)).clip(lower=0)
+
+        remainder = plan["remainder"]
+        if remainder:
+            taken = block.loc[missing, plan["targets"]].sum(axis=1)
+            block.loc[missing, remainder] = (base.loc[missing] - taken).clip(lower=0)
+
+        municipal.loc[rows, plan["targets"] + ([remainder] if remainder else [])] = \
+            block[plan["targets"] + ([remainder] if remainder else [])].values
+        municipal.loc[rows, _DWELLING_USE_PREDICTED] = missing.values
+
+    return municipal
+
+
+def EmptyAndSecondaryDwellingsCensus(wd, municipality_code=None, years=None, predict=False):
     """Empty, secondary and non-main dwellings in the 2001, 2011 and 2021 censuses.
 
     Returns a dict with the ``"Municipality"``, ``"Province"`` and
@@ -1561,8 +1893,10 @@ def EmptyAndSecondaryDwellingsCensus(wd, municipality_code=None, years=None):
     ``Dwellings ~ Dwelling type:*``
         The field-census classification. ``Main`` and ``Non-main`` are published in all
         three censuses; ``Secondary`` and ``Empty`` split the non-main ones in 2001 and
-        2011 only, and 2001 adds an ``Other non-main`` residual. 2021 has no way of
-        telling a second home from an empty dwelling, so both are ``NaN``.
+        2011 only. 2021 has no way of telling a second home from an empty dwelling, so
+        both are ``NaN``. 2001 additionally publishes an "otro tipo" residual, which is
+        counted in ``Secondary`` — as INE itself does in its 2001-2011 comparison — so
+        that the 2001 secondary count means the same thing as the 2011 one.
 
     ``Dwellings ~ Electricity use:*``
         The 2021 classification by yearly electricity consumption, which INE publishes
@@ -1581,15 +1915,15 @@ def EmptyAndSecondaryDwellingsCensus(wd, municipality_code=None, years=None):
         =============  ==================================  ==========================
         ``Main``       ``Dwelling type:Main``               ``Electricity use:Regular use``
         ``Secondary``  ``Dwelling type:Secondary``          ``Electricity use:Very low
-                       (+ ``Other non-main``, in 2001)       consumption`` + ``Sporadic use``
+                                                             consumption`` + ``Sporadic use``
         ``Empty``      ``Dwelling type:Empty``              ``Electricity use:Empty``
         =============  ==================================  ==========================
 
-        The three partition the total in every census, so their shares add to 100.
-        2021's ``Very low consumption`` (up to 250 kWh, about a month of use) counts as
-        secondary rather than empty: a dwelling used a month a year is what the earlier
-        censuses recorded as a second home. 2001's ``Other non-main`` residual counts as
-        secondary too, which is what INE does in its own 2001-2011 comparison.
+        The three partition the total in every census, so their shares add to 100, and
+        they are returned as integer counts of dwellings. 2021's ``Very low consumption``
+        (up to 250 kWh, about a month of use) counts as secondary rather than empty: a
+        dwelling used a month a year is what the earlier censuses recorded as a second
+        home.
 
         This is a bridge, not an identity — the 2021 figures come from electricity
         meters and the earlier ones from a census agent's judgement at the door, so a
@@ -1602,6 +1936,11 @@ def EmptyAndSecondaryDwellingsCensus(wd, municipality_code=None, years=None):
     Every count is echoed as ``Percentage of dwellings ~ ...``, its share of the area's
     ``Dwellings``, in percent (0-100). ``Median annual electricity consumption (kWh)`` is
     published for 2021 only.
+
+    ``Predicted``
+        Whether any figure in the row was modelled rather than published — see
+        ``predict``. ``False`` everywhere unless it was asked for, and always ``False``
+        in the province and autonomous community tables, which INE publishes in full.
 
     Coverage is what each census supports, and is not the same everywhere: 2001 covers
     every municipality in full; 2011 gives the secondary/empty split only for
@@ -1630,6 +1969,26 @@ def EmptyAndSecondaryDwellingsCensus(wd, municipality_code=None, years=None):
         ``"Municipality"`` table; the coarser ones are returned whole.
     years : list, optional
         Restrict the result to these census years (2001, 2011 and/or 2021).
+    predict : bool, default False
+        Fill in the municipal figures INE withholds — the 2011 secondary/empty split
+        below 2,000 inhabitants, the 2021 electricity classification below 1,000 — with
+        modelled ones, and mark the rows in ``Predicted``. Left alone, those figures
+        stay ``NaN``, which is what the censuses actually say.
+
+        The models are gradient-boosted trees over what INE does publish everywhere:
+        the dwelling counts of all three censuses, the 2001 split (the only one that
+        exists for every municipality), and the 2021 census indicators describing the
+        place. They predict how a total divides, never the total itself — 2011's
+        non-main count and 2021's dwelling count are published for every municipality —
+        and each share is then scaled so that its province adds up to the figure INE
+        publishes for it, exactly. Summing the municipal table therefore reproduces the
+        regional ones, which with the gaps left as they come it does not.
+
+        Held out five ways, the shares are predicted at R² 0.72 (2011 secondary) and
+        0.76 (2021 empty), against 0.00 for giving every municipality the national rate.
+        The result is still an estimate, and a municipality of forty dwellings is
+        estimated no better than that; use ``Predicted`` to leave those rows out of
+        anything that turns on a single municipality.
     """
     path = "INE/EmptyAndSecondaryDwellingsCensus"
     path = path_creator(path, wd)
@@ -1682,6 +2041,23 @@ def EmptyAndSecondaryDwellingsCensus(wd, municipality_code=None, years=None):
     provinces["Province name"] = provinces["Province code"].map(
         dict(zip(_rel["Province code"], _rel["Province name"])))
 
+    # Before any filtering: the models are fitted on every municipality that carries a
+    # split, and calibrated against whole provinces, so both have to be whole here.
+    if predict:
+        predicted_filename = f"{path}/predicted_v{_DWELLING_USE_PREDICT_VERSION}.parquet"
+        if os.path.exists(predicted_filename):
+            df = pd.read_parquet(predicted_filename)
+        else:
+            print("Predicting the municipal figures INE withholds", file=sys.stdout)
+            df = _dwelling_use_predict(wd, df, provinces)
+            df.to_parquet(predicted_filename, index=False)
+    else:
+        df[_DWELLING_USE_PREDICTED] = False
+
+    for table in (provinces, communities):
+        # Published in full, so nothing in them is ever modelled.
+        table[_DWELLING_USE_PREDICTED] = False
+
     if years != None:
         df = df[df['Year'].isin(years)]
         provinces = provinces[provinces['Year'].isin(years)]
@@ -1707,6 +2083,25 @@ def EmptyAndSecondaryDwellingsCensus(wd, municipality_code=None, years=None):
 
 
 def HouseholdsPriceIndex(wd, municipality_code=None, years=None):
+    """The housing price index, by province and quarter.
+
+    Returns a dict with a ``"Province"`` DataFrame, one row per province, year and
+    quarter, split into the first-hand market (new dwellings), the second-hand market,
+    and the two together.
+
+    An index, not a price: it measures how prices moved against the base period, and
+    says nothing about what a dwelling costs in one province against another.
+
+    Parameters
+    ----------
+    wd : str
+        Working directory the downloaded data is cached under. The first call
+        downloads from INE, later ones read the local copy.
+    municipality_code : str or list of str, optional
+        Restrict the result to these municipality code(s).
+    years : list of int, optional
+        Restrict the result to these years.
+    """
 
     path = "INE/HouseholdsPriceIndex"
     path = path_creator(path, wd)
@@ -2325,6 +2720,31 @@ def _dedupe_names(names):
 
 def EssentialCharacteristicsOfPopulationAndHouseholds(
         wd, hypercadaster_ES_input_pkl_file=None, hypercadaster_ES_input_gdf=None):
+    """The 2021 survey of living conditions, extrapolated to the building.
+
+    Returns a dict of one DataFrame per topic — commuting and transport, domestic work
+    and caring, digital access and online shopping, household composition, dwelling
+    size, rooms, tenure, rent and mortgage costs, second homes, vehicles, waste
+    separation, heating and cooling and their fuels, appliances, lighting, renewable
+    installations, and the condition, accessibility and surroundings of the building —
+    each keyed by building reference.
+
+    The survey samples households; what this returns is an extrapolation of it onto
+    every building, not a census of each one.
+
+    Needs a building layer to extrapolate onto, from `hypercadaster_ES
+    <https://github.com/BeeGroup-cimne/hypercadaster_ES>`_.
+
+    Parameters
+    ----------
+    wd : str
+        Working directory the downloaded data is cached under. The first call
+        downloads from INE, later ones read the local copy.
+    hypercadaster_ES_input_pkl_file : str, optional
+        Path to a pickled hypercadaster_ES building layer.
+    hypercadaster_ES_input_gdf : geopandas.GeoDataFrame, optional
+        The building layer itself, instead of a path to it. One of the two is required.
+    """
     # Year 2021, more info:
     # https://www.ine.es/dyngs/INEbase/es/operacion.htm?c=Estadistica_C&cid=1254736177092&menu=resultados&idp=1254735572981
 
@@ -2941,6 +3361,16 @@ def extract_residential(value):
 
 
 def MunicipalityNamesToMunicipalityCodes():
+    """INE's dictionary of municipality names and their codes.
+
+    Returns one row per municipality, with the official name and the five-digit code
+    nearly every other dataset here is published against. The code is a string, and its
+    first two digits are the province — dropping the leading zero of Álava (01) breaks
+    the join.
+
+    Municipalities merge and split and their codes change with them, which is why data
+    of one year joined to the cartography of another leaves areas unmatched.
+    """
 
     df = pd.read_excel("https://www.ine.es/daco/daco42/codmun/diccionario24.xlsx", header=1)
     df['Municipality code'] = df['CPRO'].astype(int).apply(lambda x: f"{x:02d}") +\
@@ -2952,6 +3382,25 @@ def MunicipalityNamesToMunicipalityCodes():
 
 
 def AggregatedElectricityConsumption(wd, municipality_code=None, years=None):
+    """Yearly household electricity consumption, by district.
+
+    Returns a dict with a ``"Districts"`` DataFrame giving the 10th, 25th, 50th, 75th
+    and 90th percentile of household consumption in kWh, so that the spread within an
+    area is visible rather than only its average — household consumption is skewed, and
+    a few very high consumers would carry a mean away from what most households use.
+
+    Part of the 2021 census, and published for 2021 only.
+
+    Parameters
+    ----------
+    wd : str
+        Working directory the downloaded data is cached under. The first call
+        downloads from INE, later ones read the local copy.
+    municipality_code : str or list of str, optional
+        Restrict the result to these municipality code(s).
+    years : list of int, optional
+        Restrict the result to these years.
+    """
 
     path = "INE/AggregatedElectricityConsumption"
     path = path_creator(path, wd)
@@ -3116,6 +3565,25 @@ def AggregatedElectricityConsumption(wd, municipality_code=None, years=None):
 
 
 def HouseholdsRentalPriceIndex(wd, municipality_code=None, years=None):
+    """The rental price index, by municipality and district.
+
+    Returns a dict of the ``"Municipality"`` and ``"Districts"`` DataFrames, one row per
+    area and year, tracking how the cost of renting moved in each.
+
+    An **experimental** statistic in INE's own terms, published outside the official
+    series and built from tax records; it covers only the municipalities INE publishes
+    it for, which is far short of all 8,131.
+
+    Parameters
+    ----------
+    wd : str
+        Working directory the downloaded data is cached under. The first call
+        downloads from INE, later ones read the local copy.
+    municipality_code : str or list of str, optional
+        Restrict the result to these municipality code(s).
+    years : list of int, optional
+        Restrict the result to these years.
+    """
 
     path = "INE/HouseholdsRentalPriceIndex"
     path = path_creator(path, wd)
@@ -3176,6 +3644,25 @@ def HouseholdsRentalPriceIndex(wd, municipality_code=None, years=None):
 
 
 def ConsumerPriceIndex(wd, years=None):
+    """The consumer price index, 2015 base, by consumption class.
+
+    Returns a dict with a single ``"National"`` DataFrame, one row per year and month,
+    holding the general index alongside the COICOP classes: food and drink, tobacco,
+    clothing, housing costs (rent, electricity, gas, water), household goods, health,
+    transport, communications, recreation, education, restaurants and hotels, and other
+    services.
+
+    This is the deflator for the nominal money the income atlas and the two price
+    indices are published in.
+
+    Parameters
+    ----------
+    wd : str
+        Working directory the downloaded data is cached under. The first call
+        downloads from INE, later ones read the local copy.
+    years : list of int, optional
+        Restrict the result to these years.
+    """
 
     path = "INE/ConsumerPriceIndex"
     path = path_creator(path, wd)
@@ -4153,8 +4640,23 @@ def AdministrativeBoundaries(wd, year=None, level="Census tracts", municipality_
 
 _PMTILES_EXTENT = 4096       # the integer grid each tile's coordinates are written on
 _PMTILES_BUFFER = 16         # grid units kept past the edge, so borders meet across tiles
-_PMTILES_MIN_ZOOM = 5
-_PMTILES_MAX_ZOOM = 12       # a tile unit is ~2 m here, finer than the boundaries are drawn
+# Low enough to cover the view a country-wide map opens on. Spain reaches past the
+# Canary Islands, so fitting the whole of it lands around zoom 4 — and a vector map
+# draws nothing at all below the archive's own floor, rather than stretching the
+# lowest level it has. The levels below 5 are a handful of tiles between them.
+_PMTILES_MIN_ZOOM = 3
+_PMTILES_MAX_ZOOM = 12
+
+# The top zoom is the one the map keeps drawing however far past it the user zooms, so
+# its grid is what every closer view is magnified from: at the shared 4096 the quantised
+# edges are ~2 m apart, which at a street-level zoom is a staircase. Writing that one
+# level on a finer grid buys the detail back without the fourfold tile count of another
+# zoom level — MVT carries the extent per tile, so the reader needs to be told nothing.
+_PMTILES_MAX_ZOOM_EXTENT = 16384
+
+# Bumped whenever the tiles are written differently, so that archives built by an
+# earlier version are rebuilt instead of being read back with the old geometry in them.
+_PMTILES_FORMAT = 3
 
 
 def _require_pmtiles():
@@ -4215,10 +4717,12 @@ def _build_boundary_tiles(gdf, filename, key_columns,
 
     tiles = {}
     for zoom in range(min_zoom, max_zoom + 1):
+        extent = _PMTILES_MAX_ZOOM_EXTENT if zoom == max_zoom else _PMTILES_EXTENT
+
         # Simplified once per zoom, to what a tile unit can hold, rather than once per
         # tile: the same polygon lands in many tiles and the work would be repeated.
         width = 360.0 / (2 ** zoom)
-        simplified = shapely.simplify(geometries, width / _PMTILES_EXTENT, preserve_topology=True)
+        simplified = shapely.simplify(geometries, width / extent, preserve_topology=True)
         tree = STRtree(simplified)
 
         first_column, last_column, first_row, last_row = _tile_range(bounds, zoom)
@@ -4241,10 +4745,15 @@ def _build_boundary_tiles(gdf, filename, key_columns,
                 if not features:
                     continue
 
+                # Quantised to the tile's own bounds, never to the padded clip box: the
+                # reader maps 0..extent onto exactly the tile, so stretching the padded
+                # box over that range would inset every tile's content by the width of
+                # the padding and draw the tile grid as a gap between the areas. What
+                # falls in the padding belongs outside 0..extent, which is what the
+                # buffer is, and the transform is linear and unclipped, so it lands there.
                 data = encode({"name": "areas", "features": features},
-                              default_options={"quantize_bounds": (minx - pad_x, miny - pad_y,
-                                                                   maxx + pad_x, maxy + pad_y),
-                                               "extents": _PMTILES_EXTENT,
+                              default_options={"quantize_bounds": (minx, miny, maxx, maxy),
+                                               "extents": extent,
                                                "y_coord_down": False,
                                                "on_invalid_geometry": None})
                 if data:
@@ -4297,7 +4806,7 @@ def BoundaryTiles(wd, year=None, level="Census tracts"):
     year = _resolve_boundary_year(year)
 
     path = path_creator("INE/AdministrativeBoundaries", wd)
-    filename = f"{path}/{_BOUNDARY_LEVEL_FILES[level]}_{year}.pmtiles"
+    filename = f"{path}/{_BOUNDARY_LEVEL_FILES[level]}_{year}_v{_PMTILES_FORMAT}.pmtiles"
 
     if not os.path.exists(filename):
         gdf = AdministrativeBoundaries(wd=wd, year=year, level=level)
@@ -4318,6 +4827,10 @@ def ServeMaps(wd, port=8000, directory=None):
     written with ``tiles=True`` has to be served. This serves ``{wd}/INE`` on
     localhost and returns the running server; call ``shutdown()`` on it when done, or
     leave it running for the session.
+
+    A tiled map reads its PMTiles archive in place, asking for the byte ranges it
+    needs, so what serves it has to answer range requests — this does, which the
+    stock `http.server` does not.
 
     >>> server = INE.ServeMaps(wd)          # doctest: +SKIP
     >>> # open the printed URL, then, when finished:
@@ -4343,10 +4856,69 @@ def ServeMaps(wd, port=8000, directory=None):
         def log_message(self, *args):
             pass
 
+        def end_headers(self):
+            # Said on every response, so the page knows it may ask for byte ranges
+            # before it has a reason to try one.
+            self.send_header("Accept-Ranges", "bytes")
+            SimpleHTTPRequestHandler.end_headers(self)
+
+        def send_range(self):
+            """Answer a byte-range request, which is how a map reads a PMTiles archive.
+
+            The archive is read in place: the page fetches its header, then the
+            directory covering the view, then the tiles themselves, each as a range of
+            the one file. `SimpleHTTPRequestHandler` answers every GET with the whole
+            file, which would mean downloading 35 MB before the first tile is drawn.
+
+            Returns whether the request was one, and was answered here.
+            """
+            header = self.headers.get("Range")
+            match = re.match(r"^bytes=(\d+)-(\d*)$", header.strip()) if header else None
+            if not match:
+                return False
+
+            path = self.translate_path(self.path)
+            if not os.path.isfile(path):
+                return False
+
+            size = os.path.getsize(path)
+            start = int(match.group(1))
+            end = int(match.group(2)) if match.group(2) else size - 1
+            end = min(end, size - 1)
+
+            if start > end:
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.end_headers()
+                return True
+
+            self.send_response(206)
+            self.send_header("Content-Type", self.guess_type(path))
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+            self.send_header("Content-Length", str(end - start + 1))
+            # An archive is rebuilt only by deleting it, so what a range holds never
+            # changes under a page: the browser can keep every piece it has read.
+            self.send_header("Cache-Control", "public, max-age=86400, immutable")
+            self.end_headers()
+
+            with open(path, "rb") as handle:
+                handle.seek(start)
+                remaining = end - start + 1
+                while remaining > 0:
+                    chunk = handle.read(min(65536, remaining))
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    remaining -= len(chunk)
+            return True
+
         def do_GET(self):
+            if self.send_range():
+                return
+
             # /tiles/<archive>/<z>/<x>/<y>.pbf reads one tile out of the PMTiles
-            # archive, so that the whole level stays the single cached file it was
-            # built as instead of tens of thousands of little ones on disk.
+            # archive. Maps now read the archive directly, by range, and this is kept
+            # only so that pages written by an earlier version still draw.
             match = re.match(r"^/tiles/([\w.-]+)/(\d+)/(\d+)/(\d+)\.pbf$", self.path)
             if not match:
                 return SimpleHTTPRequestHandler.do_GET(self)
@@ -4404,8 +4976,46 @@ def ServeMaps(wd, port=8000, directory=None):
 # reverse what "low" looks like, and the ramp is what carries the magnitude.
 
 # Sequential ramp, steps 100 (lightest) to 700 (darkest).
+# Where the ramps start. A chart draws a sequential ramp on its own surface, and
+# lets the lightest step recede into it; a choropleth draws it over a basemap,
+# where a class that recedes is a class nobody can read — step 100 sits at a
+# contrast of 1.00 against the grey the areas with no data are painted with, which
+# is to say the two are the same shade. So the ramps start at the step the method
+# floors an ordinal scale at (250, the lightest that still clears 2:1 against a
+# light surface) and run to the darkest.
+_MAP_RAMP_FLOOR = 3
+
 _MAP_SEQUENTIAL_RAMP = ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7", "#3987e5",
                         "#2a78d6", "#256abf", "#1c5cab", "#184f95", "#104281", "#0d366b"]
+
+# The other hues, on the lightness steps of the ramp above so that a map reads the same
+# whichever is picked — only the hue changes, never how far apart two classes look.
+_MAP_GREEN_RAMP = ["#d7f0d5", "#c3e8c0", "#aee0ab", "#95d696", "#7bcb82", "#5fbe6e", "#45b05c",
+                   "#33a04f", "#2b8e46", "#227c3d", "#1a6a34", "#12572a", "#0b4520"]
+
+_MAP_ORANGE_RAMP = ["#fde3cc", "#fcd4b3", "#fbc49a", "#fab381", "#f8a169", "#f58f52", "#f07c3d",
+                    "#e56a2c", "#d55a22", "#c24b1a", "#ad3d13", "#96300e", "#7d2409"]
+
+_MAP_PURPLE_RAMP = ["#e2dcf0", "#d3cbe9", "#c3b9e2", "#b3a7db", "#a294d3", "#9181cb", "#806ec2",
+                    "#7059b8", "#6247ab", "#553a9c", "#482f8b", "#3b2578", "#2f1c63"]
+
+# Viridis, which runs the other way — dark at the low end, light at the high one — and
+# so is trimmed at the other end too: its last two steps are the yellows, which is the
+# one part of it that disappears into a light basemap.
+_MAP_VIRIDIS_RAMP = ["#440154", "#481f70", "#443983", "#3b528b", "#31688e", "#287c8e", "#21918c",
+                     "#20a486", "#35b779", "#5ec962", "#90d743", "#c8e020", "#fde725"]
+
+# The sequential palettes, by the name `palette` takes, each already cut down to the
+# steps a choropleth can use: see `_MAP_RAMP_FLOOR`. "sequential" is the blue one,
+# which is the default and keeps its old name.
+_MAP_SEQUENTIAL_RAMPS = {
+    "sequential": _MAP_SEQUENTIAL_RAMP[_MAP_RAMP_FLOOR:],
+    "blues": _MAP_SEQUENTIAL_RAMP[_MAP_RAMP_FLOOR:],
+    "greens": _MAP_GREEN_RAMP[_MAP_RAMP_FLOOR:],
+    "oranges": _MAP_ORANGE_RAMP[_MAP_RAMP_FLOOR:],
+    "purples": _MAP_PURPLE_RAMP[_MAP_RAMP_FLOOR:],
+    "viridis": _MAP_VIRIDIS_RAMP[:-2],
+}
 
 # The warm arm of the diverging pair: the same lightness steps as the ramp above,
 # in red, so that a value and its mirror image read as equally far from the middle.
@@ -4417,15 +5027,6 @@ _MAP_DIVERGING_WARM_RAMP = ["#fed4d0", "#f9c0ba", "#f7aba4", "#f1968e", "#ed7f77
 # one of them straddles the centre.
 _MAP_NEUTRAL = "#f0efec"
 
-# Where the ramps start. A chart draws a sequential ramp on its own surface, and
-# lets the lightest step recede into it; a choropleth draws it over a basemap,
-# where a class that recedes is a class nobody can read — step 100 sits at a
-# contrast of 1.00 against the grey the areas with no data are painted with, which
-# is to say the two are the same shade. So the ramps start at the step the method
-# floors an ordinal scale at (250, the lightest that still clears 2:1 against a
-# light surface) and run to the darkest.
-_MAP_RAMP_FLOOR = 3
-
 # The categorical order. Only the first three clear the colour-blindness floors
 # when every pair can end up side by side, which is what a map does, so classes
 # past the third lean on the legend and the tooltip to be told apart.
@@ -4433,6 +5034,15 @@ _MAP_CATEGORICAL = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008
                     "#e34948"]
 
 _MAP_NO_DATA_COLOR = "#e1e0d9"
+
+# The palettes the page offers a numeric variable, in the order the picker lists them.
+# "blues" is left out because it is the same ramp as "sequential", which is already here.
+_MAP_PALETTE_CHOICES = ["sequential", "greens", "oranges", "purples", "viridis", "diverging"]
+
+# What the picker calls them, since "sequential" names how a ramp is read rather than
+# what it looks like, and a reader picking a colour is picking the colour.
+_MAP_PALETTE_LABELS = {"sequential": "Blues", "greens": "Greens", "oranges": "Oranges",
+                       "purples": "Purples", "viridis": "Viridis", "diverging": "Diverging"}
 
 # How many digits each code is written with, so that codes that went through a
 # float column, or lost their leading zero, still join.
@@ -4455,8 +5065,8 @@ def _sample_ramp(ramp, n):
 
 def _map_colors(n, palette):
     """The colours of `n` classes under `palette`."""
-    if palette == "sequential":
-        return _sample_ramp(_MAP_SEQUENTIAL_RAMP[_MAP_RAMP_FLOOR:], n)
+    if palette in _MAP_SEQUENTIAL_RAMPS:
+        return _sample_ramp(_MAP_SEQUENTIAL_RAMPS[palette], n)
 
     if palette == "diverging":
         arm = n // 2
@@ -4470,7 +5080,8 @@ def _map_colors(n, palette):
                              f"not {n}.")
         return _MAP_CATEGORICAL[:n]
 
-    raise ValueError(f"Unknown palette {palette!r}. Use 'sequential', 'diverging' or 'categorical'.")
+    raise ValueError(f"Unknown palette {palette!r}. Use one of "
+                     f"{', '.join(sorted(_MAP_SEQUENTIAL_RAMPS))}, 'diverging' or 'categorical'.")
 
 
 def _map_bin_edges(values, classification, bins, palette, center):
@@ -4490,24 +5101,43 @@ def _map_bin_edges(values, classification, bins, palette, center):
         # Both arms are cut the same way and mirrored around the centre, so that
         # the colour of a value depends on how far from the centre it is and on
         # which side, and not on how the two sides happen to be populated.
-        center = 0.0 if center is None else float(center)
+        #
+        # The middle of the data, not zero, when none is given: zero is the midpoint
+        # of a change or a difference, but of nothing that is only ever positive —
+        # a percentage centred on zero spends half its classes below the smallest
+        # value there is, which reads as negative percentages nobody can be shown.
+        # Pass `center` explicitly for the variables whose midpoint really is zero.
+        center = float(np.median(finite)) if center is None else float(center)
+        low, high = float(finite.min()), float(finite.max())
+
+        # How far the mirror can go before it leaves the data behind. The centre is
+        # almost never in the middle of the range, so the shorter side is what both
+        # arms have to fit inside — mirroring past it puts class boundaries where no
+        # value can be, which on a variable that is never negative is a legend of
+        # negative numbers, and on any variable is a run of empty classes.
+        reach = min(center - low, high - center)
+        if reach <= 0:
+            reach = float(np.abs(finite - center).max()) or 1.0
+
         deviation = np.abs(finite - center)
         arm_bins = max(1, bins // 2)
         if classification == "quantiles":
-            arm = np.unique(np.quantile(deviation, np.linspace(0, 1, arm_bins + 1))[1:])
+            arm = np.quantile(deviation, np.linspace(0, 1, arm_bins + 1))[1:]
         elif classification == "equal_interval":
-            spread = float(deviation.max()) or 1.0
-            arm = np.linspace(0, spread, arm_bins + 1)[1:]
+            arm = np.linspace(0, reach, arm_bins + 1)[1:]
         else:
             raise ValueError(f"Unknown classification {classification!r}.")
+
+        # Capped rather than dropped, so both arms keep the same number of classes and
+        # the colours stay mirrored around the centre.
+        arm = np.unique(np.minimum(arm, reach))
         edges = np.concatenate([center - arm[::-1], [center], center + arm])
 
-        # Mirroring puts the outermost edges as far from the centre as the furthest
-        # value is, on both sides, so one of them always overshoots the data — and a
-        # legend reading "-46.8 – 5.6" for a percentage is a legend nobody believes.
-        # Pulling the two ends back onto the data moves no value into another class.
-        edges[0] = min(edges[1], max(edges[0], float(finite.min())))
-        edges[-1] = max(edges[-2], min(edges[-1], float(finite.max())))
+        # The two outer classes then carry whatever lies beyond the mirror — the long
+        # side always has a tail, and a class that quietly excluded it would colour
+        # those areas as if they were nearer the centre than they are.
+        edges[0] = min(edges[0], low)
+        edges[-1] = max(edges[-1], high)
 
     elif classification == "quantiles":
         edges = np.quantile(finite, np.linspace(0, 1, bins + 1))
@@ -4526,22 +5156,9 @@ def _map_bin_edges(values, classification, bins, palette, center):
     return edges
 
 
-def _map_decimals(edges):
-    """How many decimals the legend and the tooltips of these classes need."""
-    step = float(np.min(np.diff(edges)))
-    if step >= 10:
-        return 0
-    if step >= 1:
-        return 1
-    if step >= 0.01:
-        return 2
-    return 4
-
-
-def _format_map_number(value, decimals):
-    if value is None or not np.isfinite(value):
-        return "no data"
-    return f"{value:,.{decimals}f}"
+# How many decimals a legend needs, and how a value is written, are the page's now:
+# it is what cuts the classes, so it is what knows how far apart they came out. See
+# `decimalsOf` and `formatValue` in _MAP_HTML_TEMPLATE.
 
 
 def _map_dataframe_and_level(data, level):
@@ -4700,7 +5317,10 @@ _MAP_NON_VARIABLE_COLUMNS = {"Country code", "Year", "Quarter",
                              "Autonomous community code", "Autonomous community name",
                              "Province code", "Province name",
                              "Municipality code", "Municipality name",
-                             "District code", "Census tract code"}
+                             "District code", "Census tract code",
+                             # Says how the row was arrived at rather than what it
+                             # holds; the page takes it as a filter, not a variable.
+                             _DWELLING_USE_PREDICTED}
 
 # Past this many distinct values a text column is an identifier rather than a
 # classification, and mapping it would draw one class and a large "Other".
@@ -4718,7 +5338,7 @@ _MAP_HTML_TEMPLATE = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>__PAGE_TITLE__</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
 <style>
 :root {
   color-scheme: light;
@@ -4792,15 +5412,44 @@ h1 { font-size: 21px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em
 /* The polygons and the basemap stay light in both modes, so everything drawn over
    them keeps the light surface too: a legend on a dark plate would key the darkest
    classes in swatches that sink into the plate. */
-.map-wrap .panel, .leaflet-tooltip.map-tip {
+.map-wrap .panel, .map-tip {
   --surface-1: #fcfcfb;
   --text-primary: #0b0b0b;
   --text-secondary: #52514e;
   --text-muted: #898781;
   --border: rgba(11, 11, 11, 0.14);
 }
+/* Folds the panels away, for when what is wanted is the map and not the apparatus.
+   Sits where the legend's top corner is, so it does not move when they go. */
+.panels-toggle {
+  right: 12px; top: 12px; padding: 4px 8px; cursor: pointer;
+  font: 13px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--text-secondary);
+}
+.panels-toggle:hover { color: var(--text-primary); }
+.map-wrap.panels-hidden .legend, .map-wrap.panels-hidden .yearbar { display: none; }
 .legend { right: 12px; bottom: 20px; max-width: 230px; }
 .legend h2 { font-size: 11px; font-weight: 600; color: var(--text-muted); margin: 0 0 6px; }
+/* The controls sit above the classes they cut, so that reading down the panel goes
+   from how the variable is cut to what the cuts came out as. */
+.legend-config {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 8px;
+  align-items: center; margin: 0 0 8px; padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.legend-config.hidden { display: none; }
+.legend-config label { font-size: 11px; color: var(--text-muted); }
+.legend-config select {
+  width: 100%; font: inherit; font-size: 11px; padding: 2px 4px;
+  color: var(--text-primary); background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 4px;
+}
+.legend-config input[type="range"] { width: 100%; accent-color: #2a78d6; }
+/* Pushed to the start of its cell so the box sits under the controls above it
+   rather than stretching across the column. */
+.legend-config input[type="checkbox"] {
+  justify-self: start; accent-color: #2a78d6; margin: 0;
+}
 .legend ul { list-style: none; margin: 0; padding: 0; }
 .legend li {
   display: flex; align-items: center; gap: 8px;
@@ -4815,7 +5464,10 @@ h1 { font-size: 21px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em
 .yearbar label { font-size: 12px; color: var(--text-muted); }
 .yearbar input { width: 190px; accent-color: #2a78d6; }
 .yearbar output { font-size: 13px; font-weight: 600; min-width: 3.2em; font-variant-numeric: tabular-nums; }
-.leaflet-tooltip.map-tip {
+/* One tooltip element the page moves and fills itself: the map draws its areas on
+   the GPU and has no per-area element to hang one off. */
+.map-tip {
+  position: absolute; z-index: 700; pointer-events: none; white-space: nowrap;
   background: var(--surface-1);
   color: var(--text-primary);
   border: 1px solid var(--border);
@@ -4824,8 +5476,6 @@ h1 { font-size: 21px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em
   font: 12px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
   padding: 7px 9px;
 }
-.leaflet-tooltip.map-tip::before { display: none; }
-.tiled-tip { position: absolute; z-index: 700; pointer-events: none; white-space: nowrap; }
 .tile-problem {
   left: 50%; top: 24px; transform: translateX(-50%);
   max-width: min(560px, calc(100% - 32px)); font-size: 13px; line-height: 1.5;
@@ -4859,8 +5509,28 @@ footer a { color: inherit; }
 __VARIABLE_CONTROL__
   <div class="map-wrap">
     <div id="map" role="application" aria-label="__ARIA_LABEL__"></div>
+    <button type="button" id="panels-toggle" class="panel panels-toggle"
+            aria-label="Hide the panels" title="Hide the panels">&#9776;</button>
     <div class="panel legend">
       <h2 id="legend-title"></h2>
+      <div class="legend-config" id="legend-classify">
+        <label for="palette-input">Palette</label>
+        <select id="palette-input">__PALETTE_OPTIONS__</select>
+        <label for="bins-input">Classes</label>
+        <select id="bins-input"></select>
+        <label for="method-input">Method</label>
+        <select id="method-input"></select>
+      </div>
+      <div class="legend-config" id="legend-appearance">
+        <label for="opacity-input">Opacity</label>
+        <input type="range" id="opacity-input" min="10" max="100" step="5">
+        <label for="borders-input">Borders</label>
+        <input type="checkbox" id="borders-input">
+        <label for="tooltip-input">Tooltip</label>
+        <input type="checkbox" id="tooltip-input">
+        <label for="predicted-input" id="predicted-label">Predicted</label>
+        <input type="checkbox" id="predicted-input">
+      </div>
       <ul id="legend-items"></ul>
     </div>
 __YEAR_CONTROL__
@@ -4877,7 +5547,7 @@ __YEAR_CONTROL__
   </details>
   <footer>__FOOTER__</footer>
 </div>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 __TILE_SCRIPT__
 <script>
 // The payload is written either as plain JSON, which stays readable in an editor,
@@ -4889,8 +5559,9 @@ const TABLE_LIMIT = 500;
 
 let MAP_DATA = null;
 let map = null;
-let layer = null;
 let currentSeries = 0;
+// Replaced by `wireTooltip`, which owns the element it hides.
+let hideTooltip = function () {};
 let currentYear = null;
 // Tiled features arrive carrying only their area code, so the code is what finds an
 // area's values; an embedded feature carries its position directly.
@@ -4898,20 +5569,251 @@ const CODE_INDEX = {};
 
 function series() { return MAP_DATA.series[currentSeries]; }
 
+// What the legend controls are on. They start where the call that wrote the file left
+// them, and every classification on the page is cut from this state.
+let currentPalette = null, currentBins = null, currentMethod = null;
+// How the areas are painted, which changes nothing about how they are classified.
+let currentOpacity = 0.82, currentBorders = true, currentTooltip = true;
+// Whether the areas whose figures were modelled rather than published are shown.
+let currentPredicted = true;
+
+// Whether an area's figures for the year on show were modelled. Areas of a table that
+// draws no such distinction are all published.
+function predictedAt(index, year) {
+  if (!MAP_DATA.predicted) { return false; }
+  const values = column(MAP_DATA.predicted, year === undefined ? currentYear : year);
+  return Boolean(values && values[index]);
+}
+
+function hiddenAt(index) {
+  return !currentPredicted && predictedAt(index);
+}
+
+function classificationKey() {
+  return currentPalette + '|' + currentBins + '|' + currentMethod;
+}
+
 // One year is written as a plain array, several as an array per year: either way
 // this returns the column the map is showing.
 function column(store, year) {
+  if (!store) { return null; }
   return (year === null) ? store : store[year];
 }
 
+function overColumns(store, fn) {
+  if (Array.isArray(store)) { return fn(store); }
+  const out = {};
+  Object.keys(store).forEach(function (year) { out[year] = fn(store[year]); });
+  return out;
+}
+
+// Every year at once: the classes are cut over the whole span, so that a colour means
+// the same thing at each stop of the slider.
+function pooled(store) {
+  if (Array.isArray(store)) { return store; }
+  let out = [];
+  Object.keys(store).forEach(function (year) { out = out.concat(store[year]); });
+  return out;
+}
+
+// Half-to-even, because that is what Python's round() does and the ramps were picked
+// against it: at an odd number of classes the middle step lands exactly on .5, and
+// rounding it the other way would pick a different blue than the library documents.
+function roundHalfToEven(value) {
+  const below = Math.floor(value);
+  const rest = value - below;
+  if (rest > 0.5) { return below + 1; }
+  if (rest < 0.5) { return below; }
+  return (below % 2 === 0) ? below : below + 1;
+}
+
+function sampleRamp(ramp, n) {
+  if (n <= 1) { return [ramp[Math.floor(ramp.length / 2)]]; }
+  const out = [];
+  for (let i = 0; i < n; i++) { out.push(ramp[roundHalfToEven(i * (ramp.length - 1) / (n - 1))]); }
+  return out;
+}
+
+function paletteColors(n, palette) {
+  if (palette === 'categorical') { return MAP_DATA.categorical.slice(0, n); }
+  if (palette === 'diverging') {
+    const arm = Math.floor(n / 2);
+    const cool = sampleRamp(MAP_DATA.ramps.sequential, arm).reverse();
+    const warm = sampleRamp(MAP_DATA.divergingRamp, arm);
+    return cool.concat(n % 2 ? [MAP_DATA.neutral] : []).concat(warm);
+  }
+  return sampleRamp(MAP_DATA.ramps[palette] || MAP_DATA.ramps.sequential, n);
+}
+
+function sortedFinite(values) {
+  const out = [];
+  values.forEach(function (value) {
+    if (value !== null && value !== undefined && isFinite(value)) { out.push(value); }
+  });
+  out.sort(function (left, right) { return left - right; });
+  return out;
+}
+
+function uniqueSorted(values) {
+  const sorted = values.slice().sort(function (left, right) { return left - right; });
+  const out = [];
+  sorted.forEach(function (value) {
+    if (!out.length || value !== out[out.length - 1]) { out.push(value); }
+  });
+  return out;
+}
+
+// Linear interpolation between the two neighbouring values, which is what the file was
+// cut with — a different convention here would move areas between classes for no
+// reason the reader could see.
+function quantileOf(sorted, q) {
+  const position = (sorted.length - 1) * q;
+  const low = Math.floor(position), high = Math.ceil(position);
+  if (low === high) { return sorted[low]; }
+  return sorted[low] + (sorted[high] - sorted[low]) * (position - low);
+}
+
+// The page's copy of the classification the file was written by, so that the controls
+// can cut the values again without another call.
+function binEdges(values, method, bins, palette) {
+  const finite = sortedFinite(values);
+  if (!finite.length) { return null; }
+
+  let edges;
+  if (palette === 'diverging') {
+    // Both arms cut the same way and mirrored, so a value's colour says how far from
+    // the centre it is and on which side, not how the two sides are populated.
+    // The middle of the data when the call named no centre — zero is the midpoint of a
+    // change, but of nothing that is only ever positive, and centring a percentage on
+    // it spends half the classes below the smallest value there is.
+    const center = (MAP_DATA.center === null || MAP_DATA.center === undefined)
+      ? quantileOf(finite, 0.5) : MAP_DATA.center;
+    const low = finite[0], high = finite[finite.length - 1];
+
+    // How far the mirror can go before it leaves the data behind: the centre is almost
+    // never in the middle of the range, so the shorter side is what both arms fit
+    // inside. Mirroring past it puts boundaries where no value can be.
+    let reach = Math.min(center - low, high - center);
+    const deviation = sortedFinite(finite.map(function (value) { return Math.abs(value - center); }));
+    if (reach <= 0) { reach = deviation[deviation.length - 1] || 1; }
+
+    const armBins = Math.max(1, Math.floor(bins / 2));
+    let arm = [];
+    for (let i = 1; i <= armBins; i++) {
+      arm.push(method === 'quantiles' ? quantileOf(deviation, i / armBins) : reach * i / armBins);
+    }
+    // Capped rather than dropped, so both arms keep the same number of classes and the
+    // colours stay mirrored around the centre.
+    arm = uniqueSorted(arm.map(function (value) { return Math.min(value, reach); }));
+    edges = arm.slice().reverse().map(function (value) { return center - value; })
+               .concat([center], arm.map(function (value) { return center + value; }));
+
+    // The outer classes carry whatever lies beyond the mirror: the long side always
+    // has a tail, and excluding it would colour those areas as nearer the centre.
+    const last = edges.length - 1;
+    edges[0] = Math.min(edges[0], low);
+    edges[last] = Math.max(edges[last], high);
+  } else {
+    const low = finite[0], high = finite[finite.length - 1];
+    edges = [];
+    for (let i = 0; i <= bins; i++) {
+      edges.push(method === 'quantiles' ? quantileOf(finite, i / bins)
+                                        : low + (high - low) * i / bins);
+    }
+  }
+
+  // Ties collapse: cutting a variable where half the areas share a value gives fewer
+  // classes than asked rather than empty ones.
+  edges = uniqueSorted(edges);
+  if (edges.length < 2) { edges = [edges[0], edges[0] + 1]; }
+  return edges;
+}
+
+function decimalsOf(edges) {
+  let step = Infinity;
+  for (let i = 1; i < edges.length; i++) { step = Math.min(step, edges[i] - edges[i - 1]); }
+  if (step >= 10) { return 0; }
+  if (step >= 1) { return 1; }
+  if (step >= 0.01) { return 2; }
+  return 4;
+}
+
+function formatValue(value, decimals) {
+  if (value === null || value === undefined || !isFinite(value)) { return MAP_DATA.noDataLabel; }
+  return value.toLocaleString('en-US',
+    {minimumFractionDigits: decimals, maximumFractionDigits: decimals});
+}
+
+function classOfValue(edges, count, value) {
+  if (value === null || value === undefined || !isFinite(value)) { return null; }
+  let low = 0, high = edges.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (edges[middle] < value) { low = middle + 1; } else { high = middle; }
+  }
+  return Math.min(count - 1, Math.max(0, low - 1));
+}
+
+function numericView(entry, edges) {
+  const colors = paletteColors(edges.length - 1, currentPalette);
+  const decimals = decimalsOf(edges);
+  let missing = false;
+
+  const classes = overColumns(entry.v, function (values) {
+    return values.map(function (value) {
+      const found = classOfValue(edges, colors.length, value);
+      if (found === null) { missing = true; }
+      return found;
+    });
+  });
+  const texts = overColumns(entry.v, function (values) {
+    return values.map(function (value) { return formatValue(value, decimals); });
+  });
+
+  const legend = colors.map(function (color, index) {
+    return [color, formatValue(edges[index], decimals) + ' \\u2013 ' +
+                   formatValue(edges[index + 1], decimals)];
+  });
+  // Keyed per variable: a table can publish one variable for every area and another
+  // for only some of them, and the grey needs saying exactly where it is drawn.
+  if (missing) { legend.push([MAP_DATA.noDataColor, MAP_DATA.noDataLabel]); }
+
+  return {colors: colors, legend: legend, k: classes, t: texts};
+}
+
+// Cached per variable and per control state: cutting a country is tens of thousands of
+// areas, and the map repaints on every pan.
+function viewOf() {
+  const entry = series();
+  if (!entry.numeric) {
+    if (!entry._view) {
+      entry._view = {colors: entry.colors, legend: entry.legend, k: entry.k, t: entry.t};
+    }
+    return entry._view;
+  }
+
+  const key = classificationKey();
+  if (entry._key !== key) {
+    // Boundaries given to the call by hand are used as they are, for as long as the
+    // controls are still on them; everything else is cut here from the values.
+    const edges = (currentMethod === 'custom' && entry.edges)
+      ? entry.edges
+      : binEdges(pooled(entry.v), currentMethod, currentBins, currentPalette);
+    entry._view = edges ? numericView(entry, edges)
+                        : {colors: [], legend: [], k: null, t: null};
+    entry._key = key;
+  }
+  return entry._view;
+}
+
 function classAt(index) {
-  const values = column(series().k, currentYear);
+  const values = column(viewOf().k, currentYear);
   const value = values ? values[index] : null;
   return (value === undefined || value === null) ? null : value;
 }
 
 function textAt(index, year) {
-  const values = column(series().t, year);
+  const values = column(viewOf().t, year);
   const value = values ? values[index] : null;
   return (value === undefined || value === null) ? MAP_DATA.noDataLabel : value;
 }
@@ -4921,22 +5823,82 @@ function rowTexts(index) {
   return MAP_DATA.years.map(function (year) { return textAt(index, year); });
 }
 
-// Canvas rather than the default SVG: a census tract is one <path> element there,
-// and a page of them is tens of thousands of DOM nodes the browser lays out and
-// rewrites on every pan. On canvas the whole layer is one node.
-function styleAt(position) {
-  const k = (position === undefined) ? null : classAt(position);
-  return {
-    fill: true,
-    fillColor: k === null ? MAP_DATA.noDataColor : series().colors[k],
-    fillOpacity: k === null ? 0.45 : 0.82,
-    color: '#ffffff',
-    weight: 0.5,
-    opacity: 1
+// The class of every area, pushed into the map as feature state. The colours then
+// follow from it through the paint expressions below, so changing the palette or the
+// number of classes is one expression rewritten rather than a restyle of every area,
+// and the geometry is never touched at all.
+// Feature state set before the source has loaded is dropped rather than kept for it,
+// so the first push has to wait for the areas to arrive. Once they have, the state
+// belongs to the source and every tile loaded afterwards — panning, zooming — picks it
+// up on its own, so this is only ever needed once.
+function whenAreasReady(then) {
+  // getSource first: asking whether a source is loaded before the style has been read
+  // is itself reported as an error, and there is nothing wrong with being early.
+  const ready = function () {
+    return Boolean(map.getSource('areas')) && map.isSourceLoaded('areas');
   };
+  if (ready()) { then(); return; }
+
+  const onData = function (event) {
+    if (event.sourceId === 'areas' && ready()) {
+      map.off('sourcedata', onData);
+      then();
+    }
+  };
+  map.on('sourcedata', onData);
 }
 
-function styleOf(feature) { return styleAt(feature.properties.i); }
+function pushClasses() {
+  if (!map || !map.getSource || !map.getSource('areas')) { return; }
+  const view = viewOf();
+  const classes = column(view.k, currentYear);
+  const tiled = Boolean(MAP_DATA.tiles);
+
+  MAP_DATA.codes.forEach(function (code, position) {
+    const k = (classes && classes[position] !== undefined && classes[position] !== null)
+      ? classes[position] : null;
+    map.setFeatureState(
+      tiled ? {source: 'areas', sourceLayer: MAP_DATA.tiles.layer, id: code}
+            : {source: 'areas', id: position},
+      {k: k === null ? -1 : k, p: predictedAt(position) ? 1 : 0});
+  });
+}
+
+// -1 is "no value here", which is a class of its own rather than a missing state: a
+// state that was never set and one that was set to nothing have to look the same, and
+// only one of them can be tested for.
+// Written out class by class rather than as a lookup into an array of them: a literal
+// array of strings stays an array of strings to the style parser, and a colour is what
+// this has to be. There are never more than a handful of classes anyway.
+function fillColorExpression() {
+  const colors = viewOf().colors;
+  if (!colors.length) { return MAP_DATA.noDataColor; }
+  const match = ['match', ['coalesce', ['feature-state', 'k'], -1]];
+  colors.forEach(function (color, index) { match.push(index, color); });
+  match.push(MAP_DATA.noDataColor);   // anything with no class, -1 included
+  return match;
+}
+
+// An area with no value is drawn fainter than one with a value, at the same ratio
+// whatever the opacity control is on, so the grey never reads as a class. An area whose
+// figures were modelled is drawn or not at all, never faintly: a half-drawn area would
+// be one more shade to read, and what it says is not a matter of degree.
+function fillOpacityExpression() {
+  const painted = ['case',
+                   ['<', ['coalesce', ['feature-state', 'k'], -1], 0], currentOpacity * 0.55,
+                   currentOpacity];
+  if (currentPredicted) { return painted; }
+  return ['case', ['==', ['coalesce', ['feature-state', 'p'], 0], 1], 0, painted];
+}
+
+function repaintAreas() {
+  if (!map || !map.getLayer('areas-fill')) { return; }
+  map.setPaintProperty('areas-fill', 'fill-color', fillColorExpression());
+  map.setPaintProperty('areas-fill', 'fill-opacity', fillOpacityExpression());
+  map.setLayoutProperty('areas-line', 'visibility', currentBorders ? 'visible' : 'none');
+  map.setPaintProperty('areas-line', 'line-opacity',
+    currentPredicted ? 1 : ['case', ['==', ['coalesce', ['feature-state', 'p'], 0], 1], 0, 1]);
+}
 
 function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, function (character) {
@@ -4946,48 +5908,47 @@ function escapeHtml(text) {
 
 function tooltipOf(position) {
   if (position === undefined) { return ''; }
+  // Said on the area itself, not only in the legend: a modelled figure read off the map
+  // should not have to be remembered as one.
+  const modelled = predictedAt(position)
+    ? '<span class="tip-meta"> · ' + escapeHtml(MAP_DATA.predictedLabel.toLowerCase()) + '</span>'
+    : '';
   return '<span class="tip-name">' + escapeHtml(MAP_DATA.names[position]) + '</span>' +
          '<span class="tip-meta">' + escapeHtml(MAP_DATA.codes[position]) + '</span><br>' +
          '<span class="tip-value">' + escapeHtml(series().label) + ': <strong>' +
-         escapeHtml(textAt(position, currentYear)) + '</strong></span>';
+         escapeHtml(textAt(position, currentYear)) + '</strong>' + modelled + '</span>';
 }
 
-// The tile a probe asks for: whichever covers the middle of what is being mapped, at
-// a zoom the archive certainly holds.
-function probeTileUrl() {
-  const bounds = MAP_DATA.bounds;
-  const latitude = (bounds[0][0] + bounds[1][0]) / 2;
-  const longitude = (bounds[0][1] + bounds[1][1]) / 2;
-  const zoom = 6, n = Math.pow(2, zoom);
-  const radians = latitude * Math.PI / 180;
-  return MAP_DATA.tiles.url
-    .replace('{z}', zoom)
-    .replace('{x}', Math.floor((longitude + 180) / 360 * n))
-    .replace('{y}', Math.floor((1 - Math.log(Math.tan(radians) + 1 / Math.cos(radians))
-                                / Math.PI) / 2 * n));
-}
-
-// A tile that cannot be fetched draws nothing and says nothing, which looks exactly
-// like a map with no data on it. So the fetch is tried once, up front, and what went
+// An archive that cannot be read draws nothing and says nothing, which looks exactly
+// like a map with no data on it. So it is asked for once, up front, and what went
 // wrong is put on the page instead of leaving it blank.
 function reportTileProblem(reason) {
-  const panel = L.DomUtil.create('div', 'panel tile-problem', map.getContainer());
+  const panel = document.createElement('div');
+  panel.className = 'panel tile-problem';
   const served = location.protocol === 'file:'
-    ? 'This map keeps its geometry in vector tiles, and a page opened straight from a ' +
-      'file is not allowed to fetch them — which is why the areas are missing.'
-    : 'The vector tiles this map draws from could not be fetched (' + escapeHtml(reason) + ').';
+    ? 'This map keeps its geometry in a vector-tile archive, and a page opened straight ' +
+      'from a file is not allowed to read it — which is why the areas are missing.'
+    : 'The vector-tile archive this map draws from could not be read (' +
+      escapeHtml(reason) + ').';
   panel.innerHTML =
     '<strong>The areas cannot be drawn</strong><br>' + served +
     '<br><br>Serve the maps and open it from there:' +
     '<pre>server = INE.ServeMaps(wd)</pre>' +
     'then open <code>' + escapeHtml(location.pathname.split('/').pop()) +
     '</code> under the address it prints.';
+  document.querySelector('.map-wrap').appendChild(panel);
 }
 
+// The archive is read by byte range, so the first range is also the test: it proves
+// both that the file is there and that whatever is serving it answers ranges, which
+// is the whole reason the page can open a 35 MB archive at all.
 async function tilesReachable() {
   try {
-    const response = await fetch(probeTileUrl());
-    if (!response.ok && response.status !== 204) { throw new Error('HTTP ' + response.status); }
+    const response = await fetch(MAP_DATA.tiles.url, {headers: {Range: 'bytes=0-16'}});
+    if (!response.ok) { throw new Error('HTTP ' + response.status); }
+    if (response.status !== 206) {
+      throw new Error('the server answered the whole file instead of the range asked for');
+    }
     return true;
   } catch (error) {
     reportTileProblem(error.message || String(error));
@@ -4995,35 +5956,61 @@ async function tilesReachable() {
   }
 }
 
-// Vector tiles have no per-feature Leaflet layer to hang a tooltip on, so the tiled
-// map carries its own, following the pointer the way a sticky tooltip would.
-function startTiled() {
-  const tip = L.DomUtil.create('div', 'leaflet-tooltip map-tip tiled-tip', map.getContainer());
+// The areas, as a source the map can join the data to by area code. Whether they
+// arrive from the archive or from the page itself, everything past this point is the
+// same: the same two layers, the same paint expressions, the same feature state.
+function areaSource() {
+  if (MAP_DATA.tiles) {
+    const promote = {};
+    promote[MAP_DATA.tiles.layer] = 'c';
+    return {type: 'vector', url: 'pmtiles://' + MAP_DATA.tiles.url, promoteId: promote};
+  }
+  return {type: 'geojson', data: MAP_DATA.geojson, promoteId: 'i'};
+}
+
+// Declared in the style the map is built from rather than added to it afterwards:
+// adding a layer means waiting for the style to load, and waiting for it means racing
+// it. There is nothing here the style cannot hold from the start.
+function areaLayers() {
+  const source = {source: 'areas'};
+  if (MAP_DATA.tiles) { source['source-layer'] = MAP_DATA.tiles.layer; }
+
+  return [
+    Object.assign({
+      id: 'areas-fill',
+      type: 'fill',
+      paint: {'fill-color': fillColorExpression(), 'fill-opacity': fillOpacityExpression()}
+    }, source),
+    Object.assign({
+      id: 'areas-line',
+      type: 'line',
+      layout: {visibility: currentBorders ? 'visible' : 'none'},
+      paint: {'line-color': '#ffffff', 'line-width': 0.5}
+    }, source)
+  ];
+}
+
+// The map draws its areas on the GPU, so there is no element under the pointer to hang
+// a tooltip on: what is under it is asked for and the page's own tooltip is moved there.
+function wireTooltip() {
+  const tip = document.createElement('div');
+  tip.className = 'map-tip';
   tip.style.display = 'none';
+  document.querySelector('.map-wrap').appendChild(tip);
 
-  layer = L.vectorGrid.protobuf(MAP_DATA.tiles.url, {
-    rendererFactory: L.canvas.tile,
-    interactive: true,
-    maxNativeZoom: MAP_DATA.tiles.maxZoom,
-    getFeatureId: function (feature) { return feature.properties.c; },
-    vectorTileLayerStyles: {
-      areas: function (properties) { return styleAt(CODE_INDEX[properties.c]); }
-    }
-  }).addTo(map);
-
-  layer.on('mouseover', function (event) {
-    const position = CODE_INDEX[event.layer.properties.c];
-    if (position === undefined) { return; }
+  map.on('mousemove', 'areas-fill', function (event) {
+    if (!currentTooltip || !event.features.length) { return; }
+    const feature = event.features[0];
+    const position = MAP_DATA.tiles ? CODE_INDEX[feature.properties.c] : feature.properties.i;
+    if (position === undefined || hiddenAt(position)) { return; }
     tip.innerHTML = tooltipOf(position);
     tip.style.display = '';
+    tip.style.left = (event.point.x + 14) + 'px';
+    tip.style.top = (event.point.y + 14) + 'px';
   });
-  layer.on('mouseout', function () { tip.style.display = 'none'; });
-  map.getContainer().addEventListener('mousemove', function (event) {
-    if (tip.style.display === 'none') { return; }
-    const box = map.getContainer().getBoundingClientRect();
-    tip.style.left = (event.clientX - box.left + 14) + 'px';
-    tip.style.top = (event.clientY - box.top + 14) + 'px';
-  });
+  map.on('mouseleave', 'areas-fill', function () { tip.style.display = 'none'; });
+
+  hideTooltip = function () { tip.style.display = 'none'; };
 }
 
 function renderHeading() {
@@ -5035,10 +6022,13 @@ function renderHeading() {
 // Built as elements rather than as markup: a class label is data, and data does not
 // belong in an innerHTML.
 function renderLegend() {
+  // A non-numeric variable has no boundaries to move: its values are its classes. How
+  // the areas are painted still applies to it, so only this group goes.
+  document.getElementById('legend-classify').classList.toggle('hidden', !series().numeric);
   document.getElementById('legend-title').textContent = series().legendTitle;
   const list = document.getElementById('legend-items');
   list.replaceChildren();
-  series().legend.forEach(function (item) {
+  viewOf().legend.forEach(function (item) {
     const swatch = document.createElement('span');
     swatch.className = 'swatch';
     swatch.style.background = item[0];
@@ -5063,9 +6053,11 @@ function renderTable() {
   const numeric = series().numeric;
   const columnClass = numeric ? 'num' : '';
 
+  // The table says what the map draws, so an area hidden from one is out of the other.
   const rows = MAP_DATA.names.map(function (name, position) {
-    return {name: name, code: MAP_DATA.codes[position], texts: rowTexts(position)};
-  });
+    return {name: name, code: MAP_DATA.codes[position], texts: rowTexts(position),
+            hidden: hiddenAt(position)};
+  }).filter(function (row) { return !row.hidden; });
   if (numeric) {
     rows.sort(function (left, right) { return sortKey(left.texts) - sortKey(right.texts); });
   } else {
@@ -5103,15 +6095,17 @@ function renderTable() {
     : '';
 }
 
+// The classes each area falls in have changed — a different variable, a different year,
+// a different way of cutting them — so they are pushed again and the colours follow.
 function repaint() {
-  if (MAP_DATA.tiles) {
-    layer.redraw();     // re-runs the style function over the tiles already fetched
-    return;
-  }
-  layer.setStyle(styleOf);
-  layer.eachLayer(function (featureLayer) {
-    featureLayer.setTooltipContent(tooltipOf(featureLayer.feature.properties.i));
-  });
+  pushClasses();
+  repaintAreas();
+}
+
+// Only how the areas are painted has changed, which the paint expressions carry on
+// their own: the classes underneath them are the same.
+function repaintStyleOnly() {
+  repaintAreas();
 }
 
 // Read through a stream reader rather than through Response, whose fetch machinery
@@ -5134,7 +6128,128 @@ async function inflate(base64) {
   return new TextDecoder().decode(merged);
 }
 
+function wireLegendControls() {
+  const paletteInput = document.getElementById('palette-input');
+  const binsInput = document.getElementById('bins-input');
+  const methodInput = document.getElementById('method-input');
+
+  for (let n = 2; n <= 10; n++) {
+    const option = document.createElement('option');
+    option.value = String(n);
+    option.textContent = String(n);
+    binsInput.appendChild(option);
+  }
+  // A call is free to ask for a number of classes outside what the picker offers, and
+  // the picker has to be able to show where it started.
+  if (currentBins < 2 || currentBins > 10) {
+    const option = document.createElement('option');
+    option.value = String(currentBins);
+    option.textContent = String(currentBins);
+    binsInput.appendChild(option);
+  }
+
+  const methods = [['quantiles', 'Quantiles'], ['equal_interval', 'Linear']];
+  // Boundaries given to the call by hand are a method of their own, and one the page
+  // cannot reproduce once the number of classes or the palette has moved off them.
+  if (MAP_DATA.classification === 'custom') { methods.push(['custom', 'Custom']); }
+  methods.forEach(function (pair) {
+    const option = document.createElement('option');
+    option.value = pair[0];
+    option.textContent = pair[1];
+    methodInput.appendChild(option);
+  });
+
+  paletteInput.value = currentPalette;
+  binsInput.value = String(currentBins);
+  methodInput.value = currentMethod;
+
+  function redraw() {
+    renderLegend();
+    renderTable();
+    repaint();
+  }
+
+  function leaveCustom() {
+    if (currentMethod === 'custom') {
+      currentMethod = 'quantiles';
+      methodInput.value = 'quantiles';
+    }
+  }
+
+  paletteInput.addEventListener('change', function () {
+    currentPalette = paletteInput.value;
+    leaveCustom();
+    redraw();
+  });
+  binsInput.addEventListener('change', function () {
+    currentBins = Number(binsInput.value);
+    leaveCustom();
+    redraw();
+  });
+  methodInput.addEventListener('change', function () {
+    currentMethod = methodInput.value;
+    redraw();
+  });
+
+  // How the areas are painted. None of these touches the classification, so none of
+  // them redraws the legend or the table.
+  const opacityInput = document.getElementById('opacity-input');
+  const bordersInput = document.getElementById('borders-input');
+  const tooltipInput = document.getElementById('tooltip-input');
+
+  opacityInput.value = String(Math.round(currentOpacity * 100));
+  bordersInput.checked = currentBorders;
+  tooltipInput.checked = currentTooltip;
+
+  opacityInput.addEventListener('input', function () {
+    currentOpacity = Number(opacityInput.value) / 100;
+    repaintStyleOnly();
+  });
+  bordersInput.addEventListener('change', function () {
+    currentBorders = bordersInput.checked;
+    repaintStyleOnly();
+  });
+  tooltipInput.addEventListener('change', function () {
+    currentTooltip = tooltipInput.checked;
+    if (!currentTooltip) { hideTooltip(); }
+  });
+
+  // Only where the table draws the distinction at all.
+  const predictedInput = document.getElementById('predicted-input');
+  const predictedLabel = document.getElementById('predicted-label');
+  if (MAP_DATA.predicted) {
+    predictedLabel.textContent = MAP_DATA.predictedLabel;
+    predictedInput.checked = currentPredicted;
+    predictedInput.addEventListener('change', function () {
+      currentPredicted = predictedInput.checked;
+      hideTooltip();
+      repaintStyleOnly();
+      renderTable();
+    });
+  } else {
+    predictedInput.style.display = 'none';
+    predictedLabel.style.display = 'none';
+  }
+}
+
+function wirePanels() {
+  const toggle = document.getElementById('panels-toggle');
+  const wrap = document.querySelector('.map-wrap');
+  const apply = function (shown) {
+    wrap.classList.toggle('panels-hidden', !shown);
+    toggle.setAttribute('aria-label', shown ? 'Hide the panels' : 'Show the panels');
+    toggle.title = toggle.getAttribute('aria-label');
+    toggle.setAttribute('aria-expanded', String(shown));
+  };
+  let shown = MAP_DATA.panels !== false;
+  apply(shown);
+  toggle.addEventListener('click', function () { shown = !shown; apply(shown); });
+}
+
 function wire() {
+  wireLegendControls();
+  wirePanels();
+
   const variableInput = document.getElementById('variable-input');
   if (variableInput) {
     variableInput.addEventListener('change', function () {
@@ -5153,6 +6268,9 @@ function wire() {
       currentYear = MAP_DATA.years[Number(yearInput.value)];
       yearLabel.value = currentYear;
       repaint();
+      // Which areas were modelled is a fact about the census, not about the table, so
+      // it moves with the year and the rows on show move with it.
+      if (MAP_DATA.predicted && !currentPredicted) { renderTable(); }
     });
   }
 }
@@ -5173,33 +6291,71 @@ async function start() {
   currentYear = MAP_DATA.years.length ? MAP_DATA.years[MAP_DATA.years.length - 1] : null;
   MAP_DATA.codes.forEach(function (code, position) { CODE_INDEX[code] = position; });
 
-  map = L.map('map', {scrollWheelZoom: true, zoomControl: true, preferCanvas: true});
-  if (MAP_DATA.basemap) {
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> ' +
-                   'contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-      maxZoom: 19
-    }).addTo(map);
-  }
+  // Before anything paints: the first style callback already reads the classification.
+  currentPalette = MAP_DATA.palette;
+  currentBins = MAP_DATA.bins;
+  currentMethod = MAP_DATA.classification;
+  currentOpacity = MAP_DATA.opacity;
+  currentBorders = MAP_DATA.borders;
+  currentTooltip = MAP_DATA.tooltip;
+  currentPredicted = true;
 
+  // The archive is read in place, by byte range, rather than a tile at a time through
+  // something that unpacks it: one file, and the browser takes the pieces it needs.
   if (MAP_DATA.tiles) {
-    if (await tilesReachable()) { startTiled(); }
-  } else {
-    layer = L.geoJSON(MAP_DATA.geojson, {
-      style: styleOf,
-      onEachFeature: function (feature, featureLayer) {
-        featureLayer.bindTooltip(tooltipOf(feature.properties.i),
-                                 {sticky: true, className: 'map-tip', direction: 'top'});
-        featureLayer.on('mouseover', function (event) {
-          event.target.setStyle({weight: 2, color: '#0b0b0b'});
-          event.target.bringToFront();
-        });
-        featureLayer.on('mouseout', function (event) { layer.resetStyle(event.target); });
-      }
-    }).addTo(map);
+    if (!await tilesReachable()) { return; }
+    maplibregl.addProtocol('pmtiles', new pmtiles.Protocol().tile);
   }
 
-  map.fitBounds(MAP_DATA.bounds);
+  const style = {version: 8, sources: {}, layers: []};
+  if (MAP_DATA.basemap) {
+    style.sources.basemap = {
+      type: 'raster',
+      tiles: ['a', 'b', 'c'].map(function (host) {
+        return 'https://' + host + '.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png';
+      }),
+      tileSize: 256,
+      maxzoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> ' +
+                   'contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+    };
+    style.layers.push({id: 'basemap', type: 'raster', source: 'basemap'});
+  }
+  style.sources.areas = areaSource();
+  areaLayers().forEach(function (layer) { style.layers.push(layer); });
+
+  // Bounds are carried the way a slippy map writes them, latitude first; this one
+  // takes longitude first.
+  const bounds = [[MAP_DATA.bounds[0][1], MAP_DATA.bounds[0][0]],
+                  [MAP_DATA.bounds[1][1], MAP_DATA.bounds[1][0]]];
+
+  map = new maplibregl.Map({
+    container: 'map',
+    style: style,
+    bounds: bounds,
+    fitBoundsOptions: {padding: 24},
+    // Never below what the archive holds: there is nothing to draw down there, and a
+    // map that quietly empties itself when zoomed out reads as a map with no data.
+    minZoom: MAP_DATA.tiles ? MAP_DATA.tiles.minZoom : 0,
+    // Zoom is continuous rather than a ladder of whole levels: the areas are drawn
+    // from their geometry on every frame, so there is nothing to snap to.
+    scrollZoom: true,
+    dragRotate: false,
+    pitchWithRotate: false,
+    attributionControl: {compact: true}
+  });
+  map.touchZoomRotate.disableRotation();
+  map.addControl(new maplibregl.NavigationControl({showCompass: false}), 'top-left');
+  map.addControl(new maplibregl.ScaleControl({maxWidth: 120, unit: 'metric'}), 'bottom-left');
+
+  map.on('error', function (event) {
+    console.error('map error', event && event.error);
+  });
+
+  // The layers are already in the style, so the only thing that waits on the map is the
+  // join between the areas and their values.
+  wireTooltip();
+  whenAreasReady(pushClasses);
 
   renderHeading();
   renderLegend();
@@ -5229,6 +6385,23 @@ def _map_year_control(years):
             f'      <datalist id="year-ticks">{options}</datalist>\n'
             f'      <output id="year-label" for="year-input">{years[-1]}</output>\n'
             f'    </div>\n')
+
+
+def _map_palette_options(palette=None):
+    """The options of the legend's palette picker.
+
+    A palette the call asked for that the picker does not list — "categorical", or
+    "blues" under its other name — is added, so that the control can always show what
+    the map is actually drawn with.
+    """
+    choices = list(_MAP_PALETTE_CHOICES)
+    if palette is not None and palette not in choices:
+        choices.append(palette)
+
+    return "".join(
+        f'<option value="{_html_escape(name)}">'
+        f'{_html_escape(_MAP_PALETTE_LABELS.get(name, name.replace("_", " ").capitalize()))}'
+        f'</option>' for name in choices)
 
 
 def _map_variable_control(labels):
@@ -5289,52 +6462,58 @@ def _map_variables(df, variable, keys):
 def _map_series(df, variable, classification, bins, palette, center):
     """Classify one variable into the classes, colours and labels the page draws it with.
 
-    Returns the class of each row of `df` and its formatted value, alongside the
-    colours and the legend of the classification they belong to.
+    A numeric variable is returned as its raw values, not as finished classes: the page
+    cuts them, which is what lets the legend controls cut them again without the file
+    being written a second time. It also means one place decides where the boundaries
+    fall — and it has to be the page, because the page holds only the areas that have a
+    boundary to draw, so cutting here as well would put the legend a hair off the map
+    wherever the data covers an area the cartography does not.
+
+    A non-numeric variable has no boundaries to move — its values are its classes — so
+    it is settled here and the page only draws it.
     """
     numeric = pd.api.types.is_numeric_dtype(df[variable])
-    if not numeric and palette in ("sequential", "diverging"):
+    if not numeric and palette != "categorical":
         palette = "categorical"
 
     if numeric:
         values = pd.to_numeric(df[variable], errors="coerce").to_numpy(dtype=float)
+
+        # Cut here too, and thrown away: this is what turns a bad `palette`, `bins` or
+        # `classification` into an error at the call rather than into an empty legend
+        # in a browser, which is a long way from the line that caused it.
         edges = _map_bin_edges(values, classification, bins, palette, center)
-        colors = _map_colors(len(edges) - 1, palette)
-        decimals = _map_decimals(edges)
+        _map_colors(len(edges) - 1, palette)
 
-        classes = np.clip(np.searchsorted(edges, values, side="left") - 1,
-                          0, len(colors) - 1).astype(float)
-        classes[~np.isfinite(values)] = np.nan
-        texts = [_format_map_number(value, decimals) for value in values]
+        return {"label": variable, "legendTitle": _map_legend_title(variable), "numeric": True,
+                "values": values,
+                # Boundaries passed in by hand are the one classification the page
+                # cannot work out for itself, so those travel with it.
+                "edges": None if isinstance(classification, str) else [float(e) for e in edges]}
 
-        legend = [[colors[index],
-                   f"{_format_map_number(edges[index], decimals)} – "
-                   f"{_format_map_number(edges[index + 1], decimals)}"]
-                  for index in range(len(colors))]
-    else:
-        text = df[variable].astype("string")
-        counts = text.value_counts()
-        categories = list(counts.index[:len(_MAP_CATEGORICAL)])
-        if len(counts) > len(_MAP_CATEGORICAL):
-            print(f"{variable!r} takes {len(counts)} values, more than the {len(_MAP_CATEGORICAL)} "
-                  f"a map can tell apart; the rest are shown as 'Other'", file=sys.stdout)
-            categories = categories[:len(_MAP_CATEGORICAL) - 1] + ["Other"]
-            text = text.where(text.isin(categories[:-1]) | text.isna(), "Other")
+    text = df[variable].astype("string")
+    counts = text.value_counts()
+    categories = list(counts.index[:len(_MAP_CATEGORICAL)])
+    if len(counts) > len(_MAP_CATEGORICAL):
+        print(f"{variable!r} takes {len(counts)} values, more than the {len(_MAP_CATEGORICAL)} "
+              f"a map can tell apart; the rest are shown as 'Other'", file=sys.stdout)
+        categories = categories[:len(_MAP_CATEGORICAL) - 1] + ["Other"]
+        text = text.where(text.isin(categories[:-1]) | text.isna(), "Other")
 
-        colors = _map_colors(len(categories), "categorical")
-        order = {category: index for index, category in enumerate(categories)}
-        classes = pd.to_numeric(text.map(order), errors="coerce").to_numpy(dtype=float)
-        texts = list(text.fillna("no data").astype(str))
+    colors = _map_colors(len(categories), "categorical")
+    order = {category: index for index, category in enumerate(categories)}
+    classes = pd.to_numeric(text.map(order), errors="coerce").to_numpy(dtype=float)
 
-        legend = [[color, category] for color, category in zip(colors, categories)]
-
-    return {"label": variable, "legendTitle": _map_legend_title(variable), "numeric": numeric,
-            "colors": colors, "legend": legend, "classes": classes, "texts": texts}
+    return {"label": variable, "legendTitle": _map_legend_title(variable), "numeric": False,
+            "colors": colors, "classes": classes,
+            "texts": list(text.fillna("no data").astype(str)),
+            "legend": [[color, category] for color, category in zip(colors, categories)]}
 
 
 def MapVariable(data, variable=None, wd=None, level=None, year=None, boundaries_year=None,
                 output_file=None, classification="quantiles", bins=6, palette="sequential",
                 center=None, title=None, subtitle=None, basemap=True, tiles=False,
+                opacity=0.82, borders=None, panels=True,
                 simplify_tolerance=None, max_areas=25000, max_cells=10000000):
     """Write a standalone HTML choropleth of a dataset.
 
@@ -5344,6 +6523,11 @@ def MapVariable(data, variable=None, wd=None, level=None, year=None, boundaries_
     years, drag the year slider. The classes are computed over every year at once,
     so the colours mean the same thing at each stop of the slider. The page also
     carries the values as a table, since a colour alone is not a readable number.
+
+    The legend carries the classification itself — palette, number of classes, and
+    quantiles or linear — and cutting the values again is the page's own work, so
+    trying another cut costs a click rather than another call. `palette`, `bins`
+    and `classification` set where those controls start.
 
     The page is one self-contained file: the geometry travels inside it, gzipped and
     base64'd once it is big enough for that to pay (it is unpacked in the browser
@@ -5388,15 +6572,38 @@ def MapVariable(data, variable=None, wd=None, level=None, year=None, boundaries_
     classification : {"quantiles", "equal_interval"} or list, default "quantiles"
         How to cut the numeric range into classes, or the class boundaries
         themselves. Applies to every variable in the page. Ignored for a
-        non-numeric variable, whose values are the classes.
+        non-numeric variable, whose values are the classes. This is where the
+        page's ``Method`` control starts; boundaries given as a list are offered
+        there as ``Custom``, and are lost once another cut is asked for.
     bins : int, default 6
-        Number of classes.
-    palette : {"sequential", "diverging", "categorical"}, default "sequential"
-        ``"sequential"`` for a magnitude, ``"diverging"`` for a value read against
-        a midpoint (a change, a difference from an average), ``"categorical"`` for
-        classes with no order. A non-numeric variable is always categorical.
+        Number of classes, and where the page's ``Classes`` control starts.
+    palette : {"sequential", "greens", "oranges", "purples", "viridis",
+               "diverging", "categorical"}, default "sequential"
+        A sequential ramp for a magnitude — ``"sequential"`` is the blue one, also
+        reachable as ``"blues"`` — ``"diverging"`` for a value read against a
+        midpoint (a change, a difference from an average), ``"categorical"`` for
+        classes with no order. A non-numeric variable is always categorical. This
+        is where the page's ``Palette`` control starts. ``"viridis"`` runs dark to
+        light rather than light to dark, and stops short of its yellows, which are
+        the part of it a light basemap swallows.
     center : float, optional
-        The midpoint of a diverging map. Defaults to 0.
+        The midpoint of a diverging map. Defaults to the median of the values,
+        which is the only midpoint that means anything for a variable that is
+        never negative — pass ``center=0`` for a change or a difference, whose
+        midpoint really is zero.
+    opacity : float, default 0.82
+        How solid the areas are drawn, between 0 and 1, and where the page's
+        ``Opacity`` slider starts. Areas with no value are drawn fainter still,
+        at the same ratio whatever this is set to.
+    borders : bool, optional
+        Draw the white hairline between areas. Defaults to ``True``, except on a
+        tiled map, where every area is cut at the tile boundaries and outlining
+        the pieces draws the tile grid across the map. The page's ``Borders``
+        checkbox overrides it either way.
+    panels : bool, default True
+        Open the page with the legend and the year slider showing. The button in
+        the map's top corner folds them away and back either way, for when what is
+        wanted is the map and not the apparatus.
     title, subtitle : str, optional
         Override the generated heading. Without a title, the heading names the
         variable being shown, and follows the picker.
@@ -5407,9 +6614,12 @@ def MapVariable(data, variable=None, wd=None, level=None, year=None, boundaries_
         Serve the geometry as vector tiles rather than carrying it in the page. The
         boundaries of the whole level are built once into a PMTiles archive beside the
         cartography (see `BoundaryTiles`) and reused by every later map of that level
-        and year, and the browser fetches only the tiles it draws — which is what
-        makes the 36,333 census tracts of the country mappable at full detail. The
-        page then has to be served rather than opened from disk: see `ServeMaps`.
+        and year, and the page reads only the byte ranges of it that it draws — which
+        is what makes the 36,333 census tracts of the country mappable at full detail.
+        The page then has to be served rather than opened from disk, by something that
+        answers range requests: see `ServeMaps`. An archive written by an older version
+        of social_ES is rebuilt rather than read, so the first tiled map after an
+        upgrade pays for the build again.
     simplify_tolerance : float, optional
         Tolerance in metres the boundaries are simplified with, to keep the page
         small. Defaults to how much geometry there is: a metre, which is invisible,
@@ -5427,6 +6637,16 @@ def MapVariable(data, variable=None, wd=None, level=None, year=None, boundaries_
     # Checked up front, so that a missing geopandas is reported before a dataset the
     # size of a census has been ground through.
     _require_geopandas()
+
+    if not 0 < float(opacity) <= 1:
+        raise ValueError(f"opacity must be over 0 and at most 1, not {opacity!r}.")
+
+    # A tiled map cuts every area at the tile boundaries, and an outline drawn around
+    # the pieces is an outline drawn along those cuts — the tile grid, in white, over
+    # the whole map. So the outlines are off by default exactly where they would draw
+    # it, and the page's own control can still put them back.
+    if borders is None:
+        borders = not tiles
 
     if wd is None:
         raise TypeError("MapVariable() needs `wd`, the working directory the cartography is "
@@ -5456,6 +6676,10 @@ def MapVariable(data, variable=None, wd=None, level=None, year=None, boundaries_
 
     variables = _map_variables(df, variable, keys)
 
+    # Carried through the reshaping below without being mapped: it says how the row was
+    # arrived at, which the page takes as a filter rather than as a variable.
+    qualifiers = [_DWELLING_USE_PREDICTED] if _DWELLING_USE_PREDICTED in df.columns else []
+
     group_keys = keys + (["Year"] if years else [])
     if df.duplicated(subset=group_keys).any():
         # Several rows per area and year — a dataset published by quarter, say.
@@ -5463,11 +6687,13 @@ def MapVariable(data, variable=None, wd=None, level=None, year=None, boundaries_
         # saying so is better than a map of whichever row happened to come first.
         print(f"Several rows per area and year in the {level!r} table; mapping their mean",
               file=sys.stdout)
-        df = df.groupby(group_keys, as_index=False).agg(
-            {name: ("mean" if pd.api.types.is_numeric_dtype(df[name]) else "first")
-             for name in variables})
+        aggregation = {name: ("mean" if pd.api.types.is_numeric_dtype(df[name]) else "first")
+                       for name in variables}
+        # One modelled row among them makes the area's figure modelled.
+        aggregation.update({name: "max" for name in qualifiers})
+        df = df.groupby(group_keys, as_index=False).agg(aggregation)
     else:
-        df = df[group_keys + variables].copy()
+        df = df[group_keys + variables + qualifiers].copy()
 
     if years:
         df["Year"] = df["Year"].astype(int)
@@ -5589,41 +6815,61 @@ def MapVariable(data, variable=None, wd=None, level=None, year=None, boundaries_
               f"`boundaries_year` closer to the data.", file=sys.stdout)
 
     # The variables -----------------------------------------------------------
-    def area_column(series, key, published_year):
-        """The class, or the text, of every area for one year of one variable."""
-        source = series["classes"] if key == "classes" else series["texts"]
+    def area_column(source, published_year, cast):
+        """One year of one variable, read off in the order the areas are drawn in."""
         column = []
         for rows in area_rows:
             position = rows.get(published_year)
-            if position is None:
-                column.append(None)
-            elif key == "classes":
-                value = source[position]
-                column.append(None if pd.isna(value) else int(value))
-            else:
-                column.append(source[position])
+            column.append(None if position is None else cast(source[position]))
         return column
+
+    def by_year(source, cast):
+        """`area_column` for every year of the slider, or for the only year there is."""
+        if slider_years:
+            return {str(one): area_column(source, one, cast) for one in slider_years}
+        return area_column(source, single_year, cast)
+
+    def as_number(value):
+        return None if not np.isfinite(value) else float(value)
+
+    def as_class(value):
+        return None if pd.isna(value) else int(value)
+
+    # Which areas hold a modelled figure rather than a published one, if the table says.
+    # It qualifies the whole row, so it is one store for the page rather than one per
+    # variable, and it is keyed by year like the values are — a municipality can be
+    # published in one census and modelled in the next.
+    predicted = None
+    if _DWELLING_USE_PREDICTED in df.columns:
+        flags = df[_DWELLING_USE_PREDICTED].fillna(False).to_numpy()
+        if flags.any():
+            predicted = by_year(flags, lambda value: bool(value))
 
     payload_series = []
     for name in variables:
         series = _map_series(df, name, classification, bins, palette, center)
-        if slider_years:
-            classes = {str(one): area_column(series, "classes", one) for one in slider_years}
-            texts = {str(one): area_column(series, "texts", one) for one in slider_years}
-            missing = any(value is None for column in classes.values() for value in column)
+        entry = {"label": series["label"], "legendTitle": series["legendTitle"],
+                 "numeric": series["numeric"]}
+
+        if series["numeric"]:
+            # Just the values: the page cuts them into classes, colours them and labels
+            # them, both on load and whenever a legend control is moved.
+            entry["v"] = by_year(series["values"], as_number)
+            if series["edges"] is not None:
+                entry["edges"] = series["edges"]
         else:
-            classes = area_column(series, "classes", single_year)
-            texts = area_column(series, "texts", single_year)
-            missing = any(value is None for value in classes)
+            entry["colors"] = series["colors"]
+            classes = by_year(series["classes"], as_class)
+            missing = any(value is None for value in
+                          (sum(classes.values(), []) if slider_years else classes))
+            # Keyed per variable, not per page: a table can publish one variable for
+            # every area and another for only some of them, and the grey needs saying
+            # exactly where it is drawn.
+            entry["legend"] = series["legend"] + ([[_MAP_NO_DATA_COLOR, "no data"]] if missing else [])
+            entry["k"] = classes
+            entry["t"] = by_year(series["texts"], lambda value: value)
 
-        # Keyed per variable, not per page: a table can publish one variable for
-        # every area and another for only some of them, and the grey needs saying
-        # exactly where it is drawn.
-        legend = series["legend"] + ([[_MAP_NO_DATA_COLOR, "no data"]] if missing else [])
-
-        payload_series.append({"label": series["label"], "legendTitle": series["legendTitle"],
-                               "numeric": series["numeric"], "colors": series["colors"],
-                               "legend": legend, "k": classes, "t": texts})
+        payload_series.append(entry)
 
     # The page ----------------------------------------------------------------
     minx, miny, maxx, maxy = bounds
@@ -5638,13 +6884,37 @@ def MapVariable(data, variable=None, wd=None, level=None, year=None, boundaries_
 
     payload = {
         "geojson": None if tiles else {"type": "FeatureCollection", "features": features},
-        "tiles": ({"url": f"../tiles/{tiles_url}/{{z}}/{{x}}/{{y}}.pbf",
-                   "layer": "areas", "maxZoom": _PMTILES_MAX_ZOOM} if tiles else None),
+        # The archive itself, read in place by byte range, rather than a route that
+        # unpacks a tile at a time on the way out.
+        "tiles": ({"url": f"../AdministrativeBoundaries/{tiles_url}", "layer": "areas",
+                   "minZoom": _PMTILES_MIN_ZOOM, "maxZoom": _PMTILES_MAX_ZOOM}
+                  if tiles else None),
         "names": names,
         "codes": codes,
         "series": payload_series,
         "noDataColor": _MAP_NO_DATA_COLOR,
         "noDataLabel": "no data",
+        # What the legend controls start on, and what they need to cut the values
+        # again: the ramps themselves, since the page has no palette module.
+        "palette": palette,
+        "bins": int(bins),
+        "classification": classification if isinstance(classification, str) else "custom",
+        "center": None if center is None else float(center),
+        "ramps": {name: _MAP_SEQUENTIAL_RAMPS[name]
+                  for name in set(_MAP_PALETTE_CHOICES) | {palette}
+                  if name in _MAP_SEQUENTIAL_RAMPS},
+        "divergingRamp": _MAP_DIVERGING_WARM_RAMP[_MAP_RAMP_FLOOR:],
+        "neutral": _MAP_NEUTRAL,
+        "categorical": _MAP_CATEGORICAL,
+        # How the areas are painted, and where those controls start.
+        "opacity": float(opacity),
+        "borders": bool(borders),
+        "tooltip": True,
+        "panels": bool(panels),
+        # Absent unless the table distinguishes modelled figures from published ones,
+        # which is what puts the control in the legend.
+        "predicted": predicted,
+        "predictedLabel": _DWELLING_USE_PREDICTED,
         "years": [str(one) for one in slider_years],
         "level": level_text,
         "title": title,
@@ -5677,12 +6947,13 @@ def MapVariable(data, variable=None, wd=None, level=None, year=None, boundaries_
             .replace("__TITLE__", _html_escape(heading))
             .replace("__SUBTITLE__", _html_escape(subtitle))
             .replace("__ARIA_LABEL__", _html_escape(f"Map of {heading} by {level_text.lower()}"))
+            .replace("__PALETTE_OPTIONS__", _map_palette_options(palette))
             .replace("__VARIABLE_CONTROL__", _map_variable_control(variables))
             .replace("__YEAR_CONTROL__", _map_year_control([str(one) for one in slider_years]))
             .replace("__FOOTER__", source)
             .replace("__TILE_SCRIPT__",
-                     '<script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/'
-                     'Leaflet.VectorGrid.bundled.js"></script>' if tiles else "")
+                     '<script src="https://unpkg.com/pmtiles@3.2.1/dist/pmtiles.js">'
+                     '</script>' if tiles else "")
             .replace("__PAYLOAD_GZIP__", payload_gzip_block)
             .replace("__PAYLOAD__", payload_block))
 

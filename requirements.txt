@@ -58,5 +58,6 @@ toolz==1.0.0
 tqdm==4.66.5
 tzdata==2024.1
 urllib3==2.2.1
+xgboost==3.3.0
 xlrd==2.0.2
 xmltodict==0.14.2

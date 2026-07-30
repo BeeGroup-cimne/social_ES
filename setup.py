@@ -3,7 +3,7 @@ from setuptools import find_packages, setup
 
 HERE = pathlib.Path(__file__).parent
 
-VERSION = '1.0.2'
+VERSION = '1.0.3'
 PACKAGE_NAME = 'social_ES'
 AUTHOR = 'Jose Manuel Broto Vispe'
 AUTHOR_EMAIL = 'jmbrotovispe@gmail.com'
@@ -27,6 +27,8 @@ INSTALL_REQUIRES = [
     'pyarrow>=14',
     'openpyxl>=3.1',
     'xlrd>=2.0.1',
+    # Only `EmptyAndSecondaryDwellingsCensus(predict=True)` needs this one.
+    'xgboost>=2.0',
 ]
 
 # Only `AdministrativeBoundaries` and `MapVariable` need these, so they are kept out
