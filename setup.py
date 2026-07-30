@@ -3,7 +3,7 @@ from setuptools import find_packages, setup
 
 HERE = pathlib.Path(__file__).parent
 
-VERSION = '1.0.1'
+VERSION = '1.0.2'
 PACKAGE_NAME = 'social_ES'
 AUTHOR = 'Jose Manuel Broto Vispe'
 AUTHOR_EMAIL = 'jmbrotovispe@gmail.com'
@@ -26,7 +26,22 @@ INSTALL_REQUIRES = [
     'scipy>=1.11',
     'pyarrow>=14',
     'openpyxl>=3.1',
+    'xlrd>=2.0.1',
 ]
+
+# Only `AdministrativeBoundaries` and `MapVariable` need these, so they are kept out
+# of the base install: everything else in the library is tables. shapely is floored
+# at 2.0.6, the first release built against numpy 2 — earlier ones fail on every
+# vectorised geometry operation when numpy 2 is what is installed.
+EXTRAS_REQUIRE = {
+    'geo': [
+        'geopandas>=1.0',
+        'shapely>=2.0.6',
+        # Only `MapVariable(tiles=True)` and `BoundaryTiles` need these two.
+        'pmtiles>=3.4',
+        'mapbox-vector-tile>=2.0',
+    ],
+}
 
 CLASSIFIERS = [
     'Development Status :: 5 - Production/Stable',
@@ -51,6 +66,7 @@ setup(
     author_email=AUTHOR_EMAIL,
     url=URL,
     install_requires=INSTALL_REQUIRES,
+    extras_require=EXTRAS_REQUIRE,
     license='EUPL-1.2',
     license_files=['LICENSE'],
     python_requires='>=3.9',
