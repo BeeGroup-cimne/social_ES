@@ -6,3 +6,6 @@ __pycache__
 social_ES.egg-info
 build
 dist
+.kilo
+.claude
+examples/.ipynb_checkpoints
