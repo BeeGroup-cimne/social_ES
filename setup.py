@@ -3,7 +3,7 @@ from setuptools import find_packages, setup
 
 HERE = pathlib.Path(__file__).parent
 
-VERSION = '1.0.3'
+VERSION = '1.0.4'
 PACKAGE_NAME = 'social_ES'
 AUTHOR = 'Jose Manuel Broto Vispe'
 AUTHOR_EMAIL = 'jmbrotovispe@gmail.com'
