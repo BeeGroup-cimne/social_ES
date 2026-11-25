@@ -712,6 +712,7 @@ def PopulationCensus(wd, municipality_code=None, years=None):
                     "Relación entre lugar de nacimiento y lugar de residencia": "Birth origin in Spain",
                     "Total": "Value",
                     "Periodo": "Year",
+                    "Period": "Year",
                     "Edad": "Age"
                 }
 
